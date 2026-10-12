@@ -2,9 +2,9 @@
 FROM golang:1.22-alpine AS build
 WORKDIR /app
 COPY go.mod ./
-RUN go mod download || true
+RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /judger ./cmd/judger || true
+RUN CGO_ENABLED=0 go build -o /judger ./cmd/judger
 
 FROM alpine:3.19
 RUN apk add --no-cache docker-cli
