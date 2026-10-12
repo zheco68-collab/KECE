@@ -5,10 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * 统一响应包装体。
- * 结构：{code, message, data, timestamp}
- */
+/** 统一响应包装体。 结构：{code, message, data, timestamp} */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -21,7 +18,10 @@ public class ApiResponse<T> {
     private long timestamp;
 
     public static <T> ApiResponse<T> success(T data) {
-        return new ApiResponse<>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMessage(), data,
+        return new ApiResponse<>(
+                ResultCode.SUCCESS.getCode(),
+                ResultCode.SUCCESS.getMessage(),
+                data,
                 System.currentTimeMillis());
     }
 
@@ -30,8 +30,8 @@ public class ApiResponse<T> {
     }
 
     public static <T> ApiResponse<T> error(ResultCode resultCode) {
-        return new ApiResponse<>(resultCode.getCode(), resultCode.getMessage(), null,
-                System.currentTimeMillis());
+        return new ApiResponse<>(
+                resultCode.getCode(), resultCode.getMessage(), null, System.currentTimeMillis());
     }
 
     public static <T> ApiResponse<T> error(ResultCode resultCode, String message) {

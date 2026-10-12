@@ -2,12 +2,9 @@ package com.kece.common.response;
 
 import lombok.Getter;
 
-/**
- * 业务状态码枚举，与全局接口规范一致。
- */
+/** 业务状态码枚举，与全局接口规范一致。 */
 @Getter
 public enum ResultCode {
-
     SUCCESS(200, "Success"),
     PARAM_ERROR(4001, "参数错误"),
     UNAUTHORIZED(4002, "未登录或登录已过期"),

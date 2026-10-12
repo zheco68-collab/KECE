@@ -3,9 +3,7 @@ package com.kece.common.exception;
 import com.kece.common.response.ResultCode;
 import lombok.Getter;
 
-/**
- * 业务异常，携带业务状态码。
- */
+/** 业务异常，携带业务状态码。 */
 @Getter
 public class BusinessException extends RuntimeException {
 
