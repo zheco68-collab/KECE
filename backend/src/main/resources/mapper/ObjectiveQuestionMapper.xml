@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.kece.objective.mapper.ObjectiveQuestionMapper">
+
+    <resultMap id="BaseResultMap" type="com.kece.objective.entity.ObjectiveQuestion">
+        <id column="id" property="id"/>
+        <result column="type" property="type"/>
+        <result column="content" property="content"/>
+        <result column="options" property="options"/>
+        <result column="answer" property="answer"/>
+        <result column="match_type" property="matchType"/>
+        <result column="score" property="score"/>
+        <result column="created_by" property="createdBy"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <sql id="filters">
+        <where>
+            <if test="type != null and type != ''">type = #{type}</if>
+            <if test="keyword != null and keyword != ''">AND content LIKE CONCAT('%', #{keyword}, '%')</if>
+        </where>
+    </sql>
+
+    <select id="findPage" resultMap="BaseResultMap">
+        SELECT * FROM `objective_question`
+        <include refid="filters"/>
+        ORDER BY id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM `objective_question`
+        <include refid="filters"/>
+    </select>
+
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT * FROM `objective_question` WHERE id = #{id}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO `objective_question` (type, content, options, answer, match_type, score, created_by)
+        VALUES (#{type}, #{content}, #{options}, #{answer}, #{matchType}, #{score}, #{createdBy})
+    </insert>
+
+    <update id="update">
+        UPDATE `objective_question`
+        <set>
+            <if test="type != null">type = #{type},</if>
+            <if test="content != null">content = #{content},</if>
+            <if test="options != null">options = #{options},</if>
+            <if test="answer != null">answer = #{answer},</if>
+            <if test="matchType != null">match_type = #{matchType},</if>
+            <if test="score != null">score = #{score},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM `objective_question` WHERE id = #{id}
+    </delete>
+
+</mapper>

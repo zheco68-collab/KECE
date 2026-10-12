@@ -1,4 +1,4 @@
-import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
+import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { useUserStore } from '@/stores/user'
 
 export interface ApiResponse<T = unknown> {
@@ -6,6 +6,17 @@ export interface ApiResponse<T = unknown> {
   message: string
   data: T
   timestamp: number
+}
+
+/** 携带业务错误码的异常，供调用方按 code 区分处理。 */
+export class ApiError extends Error {
+  code: number
+
+  constructor(code: number, message: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code
+  }
 }
 
 const request: AxiosInstance = axios.create({
@@ -38,13 +49,23 @@ request.interceptors.response.use(
         const userStore = useUserStore()
         userStore.clearAuth()
       }
-      return Promise.reject(new Error(body.message || '请求失败'))
+      return Promise.reject(new ApiError(body.code, body.message || '请求失败'))
     }
     return response.data as never
   },
-  (error) => {
-    return Promise.reject(error)
-  },
+  (error) => Promise.reject(error),
 )
+
+/** 类型化请求助手：响应拦截器已解包，实际返回业务 data。 */
+export const http = {
+  get: <T>(url: string, config?: AxiosRequestConfig) =>
+    request.get(url, config) as unknown as Promise<T>,
+  post: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+    request.post(url, data, config) as unknown as Promise<T>,
+  put: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+    request.put(url, data, config) as unknown as Promise<T>,
+  delete: <T>(url: string, config?: AxiosRequestConfig) =>
+    request.delete(url, config) as unknown as Promise<T>,
+}
 
 export default request

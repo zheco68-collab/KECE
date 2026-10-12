@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.kece.question.mapper.QuestionMapper">
+
+    <resultMap id="BaseResultMap" type="com.kece.question.entity.Question">
+        <id column="id" property="id"/>
+        <result column="title" property="title"/>
+        <result column="description" property="description"/>
+        <result column="difficulty" property="difficulty"/>
+        <result column="time_limit" property="timeLimit"/>
+        <result column="memory_limit" property="memoryLimit"/>
+        <result column="languages" property="languages"/>
+        <result column="created_by" property="createdBy"/>
+        <result column="status" property="status"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <sql id="filters">
+        <where>
+            <if test="status != null">status = #{status}</if>
+            <if test="difficulty != null and difficulty != ''">AND difficulty = #{difficulty}</if>
+            <if test="keyword != null and keyword != ''">AND title LIKE CONCAT('%', #{keyword}, '%')</if>
+        </where>
+    </sql>
+
+    <select id="findPage" resultMap="BaseResultMap">
+        SELECT * FROM `question`
+        <include refid="filters"/>
+        ORDER BY id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM `question`
+        <include refid="filters"/>
+    </select>
+
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT * FROM `question` WHERE id = #{id}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO `question`
+            (title, description, difficulty, time_limit, memory_limit, languages, created_by, status)
+        VALUES
+            (#{title}, #{description}, #{difficulty}, #{timeLimit}, #{memoryLimit}, #{languages}, #{createdBy}, #{status})
+    </insert>
+
+    <update id="update">
+        UPDATE `question`
+        <set>
+            <if test="title != null">title = #{title},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="difficulty != null">difficulty = #{difficulty},</if>
+            <if test="timeLimit != null">time_limit = #{timeLimit},</if>
+            <if test="memoryLimit != null">memory_limit = #{memoryLimit},</if>
+            <if test="languages != null">languages = #{languages},</if>
+            <if test="status != null">status = #{status},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM `question` WHERE id = #{id}
+    </delete>
+
+</mapper>
