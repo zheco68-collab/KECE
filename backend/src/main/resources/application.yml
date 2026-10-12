@@ -32,7 +32,7 @@ mybatis:
   type-aliases-package: com.kece.**.entity
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # 默认不将 SQL 输出到 stdout（生产环境防泄露/防性能损耗）；调试时可在 dev profile 单独开启 log-impl
 
 kece:
   jwt:

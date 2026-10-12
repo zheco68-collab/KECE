@@ -67,6 +67,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    # 仅本地开发：判题机以 DinD 方式拉起沙箱容器，需挂载 docker.sock 并提权；
+    # 生产环境须改为独立沙箱运行时或受限的 Docker API，禁止 privileged。
     privileged: true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
