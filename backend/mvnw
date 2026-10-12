@@ -26,4 +26,4 @@ if [ ! -f "$WRAPPER_JAR" ]; then
   exit 1
 fi
 
-exec "$JAVA_EXE" $MAVEN_OPTS -classpath "$WRAPPER_JAR" "$WRAPPER_LAUNCHER" "$@"
+exec "$JAVA_EXE" $MAVEN_OPTS "-Dmaven.multiModuleProjectDirectory=$MAVEN_PROJECTBASEDIR" -classpath "$WRAPPER_JAR" "$WRAPPER_LAUNCHER" "$@"

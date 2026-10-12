@@ -22,6 +22,9 @@
         <mybatis.version>3.0.3</mybatis.version>
         <jjwt.version>0.12.5</jjwt.version>
         <springdoc.version>2.5.0</springdoc.version>
+        <!-- 覆盖 Spring Boot 3.2.5 父 POM 锁定的 lombok 1.18.30（仅支持到 JDK 21）：
+             1.18.42 支持 JDK 24/25，使本机（JDK 24/25）与 CI（JDK 17/21）均可编译。 -->
+        <lombok.version>1.18.42</lombok.version>
     </properties>
 
     <dependencies>
@@ -120,6 +123,23 @@
 
     <build>
         <plugins>
+            <!-- 显式声明注解处理器路径：Lombok 1.18.30+ 的 jar 含 module-info，
+                 在 JDK 21+ 上 javac 不再从 classpath 自动发现处理器，必须走 -processorpath。
+                 这也是 Spring Initializr 生成 Lombok 项目时的标准配置。 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
@@ -140,8 +160,10 @@
                 <version>2.43.0</version>
                 <configuration>
                     <java>
+                        <!-- AOSP 风格为 4 空格缩进，与 .editorconfig 的 java 缩进约定一致 -->
                         <googleJavaFormat>
                             <version>1.22.0</version>
+                            <style>AOSP</style>
                         </googleJavaFormat>
                         <removeUnusedImports/>
                     </java>
