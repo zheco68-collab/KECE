@@ -1,0 +1,33 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: local
+    hooks:
+      - id: frontend-lint
+        name: frontend lint
+        entry: bash -c 'cd frontend && npm run lint'
+        language: system
+        pass_filenames: false
+        files: ^frontend/
+
+      - id: backend-format
+        name: backend spotless check
+        entry: bash -c 'cd backend && ./mvnw spotless:check'
+        language: system
+        pass_filenames: false
+        files: ^backend/
+
+      - id: judger-lint
+        name: judger gofmt check
+        entry: bash -c 'cd judger && test -z $(gofmt -l .)'
+        language: system
+        pass_filenames: false
+        files: ^judger/

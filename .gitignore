@@ -1,0 +1,64 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / Local
+.idea/
+.vscode/
+.claude/
+*.iml
+*.ipr
+*.iws
+
+# Node
+node_modules/
+dist/
+.npm
+.npmrc
+*.log
+.pnpm-store/
+
+# Java / Maven
+target/
+*.class
+*.jar
+!backend/.mvn/wrapper/maven-wrapper.jar
+*.war
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# Go
+judger/bin/
+judger/vendor/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Build artifacts
+build/
+out/
+
+# Logs
+logs/
+*.log
+
+# Coverage
+coverage/
+*.lcov
+
+# MinIO / local object storage
+data/
+minio-data/
+
+# Docker volumes
+mysql-data/
+redis-data/
