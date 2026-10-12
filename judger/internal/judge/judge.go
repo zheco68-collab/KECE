@@ -71,7 +71,8 @@ func (j *Judge) Process(ctx context.Context, task model.Task) {
 	report := make([]model.CaseResult, 0, len(task.TestCases))
 	statuses := make([]string, 0, len(task.TestCases))
 	maxTimeMs := 0
-	maxMemKb := 0
+	// 各用例峰值内存的最大值；全部用例都测不到时保持 nil，不伪造成 0。
+	var maxMemKb *int
 	for i, tc := range task.TestCases {
 		cr, err := j.runCase(ctx, task, ws, tc)
 		if err != nil {
@@ -83,8 +84,9 @@ func (j *Judge) Process(ctx context.Context, task model.Task) {
 		if cr.TimeMs != nil && *cr.TimeMs > maxTimeMs {
 			maxTimeMs = *cr.TimeMs
 		}
-		if cr.MemoryKb != nil && *cr.MemoryKb > maxMemKb {
-			maxMemKb = *cr.MemoryKb
+		if cr.MemoryKb != nil && (maxMemKb == nil || *cr.MemoryKb > *maxMemKb) {
+			kb := *cr.MemoryKb
+			maxMemKb = &kb
 		}
 		j.publish(ctx, task.SubmissionID, statusJudging, len(task.TestCases), i+1)
 	}
@@ -94,7 +96,7 @@ func (j *Judge) Process(ctx context.Context, task model.Task) {
 	result := model.Result{
 		Score:           intPtr(scoreFrom(statuses)),
 		TimeUsedMs:      intPtr(maxTimeMs),
-		MemoryUsedKb:    intPtr(maxMemKb),
+		MemoryUsedKb:    maxMemKb,
 		TestCasesReport: report,
 	}
 	j.finishTerminal(ctx, task.SubmissionID, overall, result)
@@ -113,7 +115,7 @@ func (j *Judge) runCase(ctx context.Context, task model.Task, ws string, tc mode
 	cr := model.CaseResult{
 		CaseID:   tc.CaseID,
 		TimeMs:   intPtr(int(res.Elapsed.Milliseconds())),
-		MemoryKb: intPtr(0),
+		MemoryKb: res.MemoryKb,
 	}
 	switch status := sandbox.ClassifyExit(res.ExitCode); status {
 	case "":
@@ -126,7 +128,10 @@ func (j *Judge) runCase(ctx context.Context, task model.Task, ws string, tc mode
 		}
 	case sandbox.StatusMemoryLimitExceeded:
 		cr.Status = status
-		cr.MemoryKb = intPtr(task.MemoryLimitMb * 1024)
+		// 撞到上限时 cgroup 峰值通常已顶到限制值；探测不可用时退回按限制值上报。
+		if cr.MemoryKb == nil {
+			cr.MemoryKb = intPtr(task.MemoryLimitMb * 1024)
+		}
 	default:
 		cr.Status = status
 	}

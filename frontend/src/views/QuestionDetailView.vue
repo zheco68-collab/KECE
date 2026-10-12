@@ -7,7 +7,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import { useUserStore } from '@/stores/user'
 import CodeEditor from '@/components/CodeEditor.vue'
 import type { Difficulty, Question, Submission, SubmissionStatus } from '@/types'
-import { LANGUAGE_LABELS, STATUS_ABBR, statusTone } from '@/utils/submission'
+import { LANGUAGE_LABELS, STATUS_ABBR, formatMemory, statusTone } from '@/utils/submission'
 
 const route = useRoute()
 const router = useRouter()
@@ -222,7 +222,7 @@ onBeforeUnmount(() => {
               {{ submission.result.timeUsedMs }} ms
             </span>
             <span v-if="submission.result?.memoryUsedKb != null" class="result-stat">
-              {{ submission.result.memoryUsedKb }} KB
+              {{ formatMemory(submission.result.memoryUsedKb) }}
             </span>
             <span v-if="submission.result?.score != null" class="result-score">
               Score {{ submission.result.score }}
@@ -254,7 +254,7 @@ onBeforeUnmount(() => {
               <span class="node-abbr">{{ STATUS_ABBR[c.status as SubmissionStatus] ?? c.status }}</span>
               <span class="node-meta"
                 >{{ c.timeMs != null ? c.timeMs + 'ms' : '-' }} ·
-                {{ c.memoryKb != null ? c.memoryKb + 'KB' : '-' }}</span
+                {{ formatMemory(c.memoryKb) }}</span
               >
             </span>
           </div>

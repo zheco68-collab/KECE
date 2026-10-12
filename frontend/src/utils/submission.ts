@@ -22,6 +22,18 @@ export const LANGUAGE_LABELS: Record<string, string> = {
   python: 'Python',
 }
 
+/**
+ * 内存读数格式化：后端按 KB 上报。
+ * 不足 1MB 保留 KB，其余折算为 MB（保留一位小数，整数值去掉小数位），避免节点方块上出现五位数。
+ */
+export function formatMemory(kb: number | null | undefined): string {
+  if (kb == null) return '-'
+  if (kb < 1024) return `${kb}KB`
+  const mb = kb / 1024
+  if (mb >= 1000) return `${Math.round(mb)}MB`
+  return `${mb.toFixed(1).replace(/\.0$/, '')}MB`
+}
+
 /** 状态对应的配色基调（用于节点方块与状态徽章）。 */
 export function statusTone(status: SubmissionStatus): string {
   switch (status) {
