@@ -154,6 +154,14 @@ button {
   background: var(--button);
   color: #fff;
 }
+.type-select {
+  background: #f0f0f0;
+  color: var(--ink-secondary);
+}
+.type-dml {
+  background: var(--button);
+  color: #fff;
+}
 
 /* 表单字段（前缀图标 + 输入框） */
 .field {

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.kece.database.mapper.DbQuestionMapper">
+
+    <resultMap id="BaseResultMap" type="com.kece.database.entity.DbQuestion">
+        <id column="id" property="id"/>
+        <result column="title" property="title"/>
+        <result column="description" property="description"/>
+        <result column="dialect" property="dialect"/>
+        <result column="type" property="type"/>
+        <result column="schema_sql" property="schemaSql"/>
+        <result column="reference_sql" property="referenceSql"/>
+        <result column="verify_sql" property="verifySql"/>
+        <result column="order_sensitive" property="orderSensitive"/>
+        <result column="status" property="status"/>
+        <result column="created_by" property="createdBy"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <sql id="filters">
+        <where>
+            <if test="status != null">status = #{status}</if>
+            <if test="type != null and type != ''">AND type = #{type}</if>
+            <if test="keyword != null and keyword != ''">AND title LIKE CONCAT('%', #{keyword}, '%')</if>
+        </where>
+    </sql>
+
+    <select id="findPage" resultMap="BaseResultMap">
+        SELECT * FROM `db_question`
+        <include refid="filters"/>
+        ORDER BY id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM `db_question`
+        <include refid="filters"/>
+    </select>
+
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT * FROM `db_question` WHERE id = #{id}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO `db_question`
+            (title, description, dialect, type, schema_sql, reference_sql, verify_sql, order_sensitive, status, created_by)
+        VALUES
+            (#{title}, #{description}, #{dialect}, #{type}, #{schemaSql}, #{referenceSql}, #{verifySql}, #{orderSensitive}, #{status}, #{createdBy})
+    </insert>
+
+    <update id="update">
+        UPDATE `db_question`
+        <set>
+            <if test="title != null">title = #{title},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="dialect != null">dialect = #{dialect},</if>
+            <if test="type != null">type = #{type},</if>
+            <if test="schemaSql != null">schema_sql = #{schemaSql},</if>
+            <if test="referenceSql != null">reference_sql = #{referenceSql},</if>
+            verify_sql = #{verifySql},
+            <if test="orderSensitive != null">order_sensitive = #{orderSensitive},</if>
+            <if test="status != null">status = #{status},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM `db_question` WHERE id = #{id}
+    </delete>
+
+</mapper>

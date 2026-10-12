@@ -9,6 +9,7 @@ Thumbs.db
 .idea/
 .vscode/
 .claude/
+.codex/
 .impeccable/
 *.iml
 *.ipr

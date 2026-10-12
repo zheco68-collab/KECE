@@ -20,10 +20,24 @@ const router = createRouter({
           component: () => import('@/views/QuestionDetailView.vue'),
         },
         {
+          path: 'submissions',
+          name: 'submissions',
+          component: () => import('@/views/SubmissionsView.vue'),
+        },
+        {
           path: 'database',
           name: 'database',
-          component: () => import('@/views/ComingSoonView.vue'),
-          meta: { title: '数据库' },
+          component: () => import('@/views/DatabaseQuestionsView.vue'),
+        },
+        {
+          path: 'database/:id',
+          name: 'database-detail',
+          component: () => import('@/views/DatabaseQuestionDetailView.vue'),
+        },
+        {
+          path: 'database-submissions',
+          name: 'database-submissions',
+          component: () => import('@/views/DatabaseSubmissionsView.vue'),
         },
         {
           path: 'frontend',

@@ -12,9 +12,11 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // 显式绑定 IPv4 回环：本机 IPv6 回环(::1)不可达，Vite 默认 localhost 会解析到 ::1 导致 5173 无法访问。
+    host: '127.0.0.1',
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
     },

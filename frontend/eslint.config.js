@@ -54,6 +54,8 @@ export default [
     rules: {
       ...tseslint.configs.recommended.rules,
       'vue/multi-word-component-names': 'off',
+      // TypeScript 类型检查已覆盖未定义变量，关闭与 TS 冲突的 no-undef。
+      'no-undef': 'off',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'warn',
     },

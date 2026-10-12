@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.kece.database.mapper.DbSubmissionMapper">
+
+    <resultMap id="BaseResultMap" type="com.kece.database.entity.DbSubmission">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="question_id" property="questionId"/>
+        <result column="dialect" property="dialect"/>
+        <result column="sql_content" property="sqlContent"/>
+        <result column="status" property="status"/>
+        <result column="score" property="score"/>
+        <result column="time_used_ms" property="timeUsedMs"/>
+        <result column="result_json" property="resultJson"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO `db_submission` (user_id, question_id, dialect, sql_content, status)
+        VALUES (#{userId}, #{questionId}, #{dialect}, #{sqlContent}, #{status})
+    </insert>
+
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT * FROM `db_submission` WHERE id = #{id}
+    </select>
+
+    <select id="findPage" resultType="com.kece.database.dto.DbSubmissionListVO">
+        SELECT s.id AS submissionId,
+               s.question_id AS questionId,
+               q.title AS questionTitle,
+               s.status AS status,
+               s.score AS score,
+               s.time_used_ms AS timeUsedMs,
+               s.sql_content AS sqlContent,
+               s.created_at AS createdAt
+        FROM `db_submission` s
+        LEFT JOIN `db_question` q ON q.id = s.question_id
+        <where>
+            <if test="userId != null">s.user_id = #{userId}</if>
+            <if test="status != null and status != ''">AND s.status = #{status}</if>
+        </where>
+        ORDER BY s.id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM `db_submission` s
+        <where>
+            <if test="userId != null">s.user_id = #{userId}</if>
+            <if test="status != null and status != ''">AND s.status = #{status}</if>
+        </where>
+    </select>
+
+    <update id="updateResult">
+        UPDATE `db_submission`
+        <set>
+            <if test="status != null">status = #{status},</if>
+            <if test="score != null">score = #{score},</if>
+            <if test="timeUsedMs != null">time_used_ms = #{timeUsedMs},</if>
+            <if test="resultJson != null">result_json = #{resultJson},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+</mapper>

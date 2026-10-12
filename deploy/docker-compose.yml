@@ -19,6 +19,23 @@ services:
       timeout: 5s
       retries: 5
 
+  # 数据库判题专用 MySQL，与业务库 mysql 完全隔离：
+  # 用户提交的 SQL 只能读到本实例的临时库，无法触及 kece 业务数据。
+  judge-mysql:
+    image: mysql:8.0
+    container_name: kece-judge-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: judge123
+    ports:
+      - "3307:3306"
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pjudge123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     container_name: kece-redis
@@ -64,14 +81,26 @@ services:
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # 工作目录必须与下方卷挂载路径一致，且与宿主机同路径：
+      # 判题机通过宿主机 docker.sock 拉起沙箱，docker run -v 的源路径按宿主机解析。
+      WORKSPACE_DIR: /workspace
+      # 数据库判题连接的独立 MySQL 实例。
+      JUDGE_MYSQL_HOST: judge-mysql
+      JUDGE_MYSQL_PORT: 3306
+      JUDGE_MYSQL_USER: root
+      JUDGE_MYSQL_PASSWORD: judge123
     depends_on:
       redis:
+        condition: service_healthy
+      judge-mysql:
         condition: service_healthy
     # 仅本地开发：判题机以 DinD 方式拉起沙箱容器，需挂载 docker.sock 并提权；
     # 生产环境须改为独立沙箱运行时或受限的 Docker API，禁止 privileged。
     privileged: true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # 判题工作目录：宿主机与判题机容器同路径共享，供沙箱容器挂载编译/运行产物。
+      - /workspace:/workspace
 
 volumes:
   mysql-data:

@@ -15,11 +15,12 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-/** 集成测试基类：共享 Testcontainers MySQL，MockMvc 直连 DispatcherServlet（不含 context-path）。 */
+/** 集成测试基类：共享 Testcontainers MySQL/Redis，MockMvc 直连 DispatcherServlet（不含 context-path）。 */
 @Testcontainers
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -34,11 +35,17 @@ public abstract class AbstractIntegrationTest {
                     .withUrlParam("allowPublicKeyRetrieval", "true")
                     .withUrlParam("useSSL", "false");
 
+    @Container
+    static final GenericContainer<?> REDIS =
+            new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
+
     @DynamicPropertySource
     static void datasourceProps(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
         registry.add("spring.datasource.username", MYSQL::getUsername);
         registry.add("spring.datasource.password", MYSQL::getPassword);
+        registry.add("spring.data.redis.host", REDIS::getHost);
+        registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
     }
 
     @Autowired protected MockMvc mockMvc;

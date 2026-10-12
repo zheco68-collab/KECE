@@ -2,6 +2,7 @@ export type Role = 'USER' | 'TEACHER' | 'ADMIN'
 export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD'
 export type ObjectiveType = 'SINGLE' | 'MULTIPLE' | 'FILL'
 export type MatchType = 'EXACT' | 'IGNORE_CASE' | 'REGEX'
+export type DbQuestionType = 'SELECT' | 'DML'
 
 export interface UserInfo {
   id: number
@@ -63,4 +64,99 @@ export interface AnswerResult {
   score: number
   fullScore: number
   correctAnswer: string
+}
+
+/** 数据库测试点：一题多套数据，表结构与标准答案在题目上。 */
+export interface DbTestCase {
+  id?: number
+  caseOrder: number
+  seedSql: string
+  /** 0 非样例 / 1 样例 */
+  isSample: number
+}
+
+export interface DbQuestion {
+  id: number
+  title: string
+  description: string
+  dialect: string
+  type: DbQuestionType
+  /** 建表语句，所有测试点共用，对所有人可见。 */
+  schemaSql: string
+  /** 标准答案，仅出题人与管理员可见，普通用户为 null。 */
+  referenceSql: string | null
+  /** DML 判分用的校验查询，仅出题人与管理员可见。 */
+  verifySql: string | null
+  orderSensitive: boolean
+  status: number
+  createdBy: number
+  testCases: DbTestCase[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DbSubmissionRecord {
+  submissionId: number
+  questionId: number
+  questionTitle: string
+  status: SubmissionStatus
+  score: number | null
+  timeUsedMs: number | null
+  sqlContent: string
+  createdAt: string
+}
+
+export type SubmissionStatus =
+  | 'PENDING'
+  | 'COMPILING'
+  | 'JUDGING'
+  | 'AI_REVIEWING'
+  | 'ACCEPTED'
+  | 'WRONG_ANSWER'
+  | 'TIME_LIMIT_EXCEEDED'
+  | 'MEMORY_LIMIT_EXCEEDED'
+  | 'RUNTIME_ERROR'
+  | 'COMPILE_ERROR'
+  | 'SYSTEM_ERROR'
+
+export interface SubmissionProgress {
+  totalCases: number
+  finishedCases: number
+}
+
+export interface TestCaseReport {
+  caseId: number
+  status: string
+  timeMs: number | null
+  memoryKb: number | null
+  expectedOutput: string | null
+  actualOutput: string | null
+}
+
+export interface SubmissionResult {
+  score: number | null
+  timeUsedMs: number | null
+  memoryUsedKb: number | null
+  compileErrorLog: string | null
+  testCasesReport: TestCaseReport[]
+}
+
+export interface Submission {
+  submissionId: number
+  status: SubmissionStatus
+  progress: SubmissionProgress | null
+  result: SubmissionResult | null
+}
+
+export interface SubmissionRecord {
+  submissionId: number
+  questionId: number
+  questionTitle: string
+  language: string
+  codeContent: string
+  status: SubmissionStatus
+  score: number | null
+  timeUsedMs: number | null
+  memoryUsedKb: number | null
+  createdAt: string
 }
