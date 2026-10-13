@@ -2,10 +2,13 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { adminApi } from '@/api/admin'
+import { questionApi } from '@/api/question'
 import { ApiError } from '@/api/request'
 import AdminNav from '@/components/AdminNav.vue'
 import DataTable from '@/components/DataTable.vue'
 import Pagination from '@/components/Pagination.vue'
+import { useConfirm } from '@/composables/useConfirm'
+import { useToast } from '@/composables/useToast'
 import { useUserStore } from '@/stores/user'
 import type { Difficulty } from '@/types'
 
@@ -24,6 +27,8 @@ interface QuestionRow {
 
 const router = useRouter()
 const userStore = useUserStore()
+const { confirm } = useConfirm()
+const toast = useToast()
 
 const keyword = ref('')
 const difficultyFilter = ref<DifficultyFilter>('')
@@ -120,6 +125,23 @@ function goEdit(row: QuestionRow) {
   router.push(`/admin/questions/${row.id}/edit`)
 }
 
+async function removeQuestion(row: QuestionRow) {
+  const ok = await confirm({
+    title: '删除编程题',
+    message: `确定删除题目「${row.title}」吗？有提交记录的题目仅管理员可强制删除，其提交与评测记录将被级联清理。`,
+    confirmText: '删除',
+    danger: true,
+  })
+  if (!ok) return
+  try {
+    await questionApi.remove(row.id)
+    toast.success(`已删除「${row.title}」`)
+    load()
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : '删除失败')
+  }
+}
+
 onMounted(() => {
   load()
 })
@@ -188,6 +210,9 @@ onBeforeUnmount(() => {
       <template #actions="{ row }">
         <div class="row-actions">
           <button class="btn btn-ghost btn-sm" type="button" @click="goEdit(row)">编辑</button>
+          <button class="btn btn-ghost btn-sm btn-danger" type="button" @click="removeQuestion(row)">
+            删除
+          </button>
         </div>
       </template>
     </DataTable>
@@ -255,5 +280,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.btn-danger {
+  color: var(--danger);
 }
 </style>

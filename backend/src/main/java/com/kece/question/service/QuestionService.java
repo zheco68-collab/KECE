@@ -88,12 +88,18 @@ public class QuestionService {
         return toVO(question);
     }
 
+    /** 删除编程题：无提交记录时出题人/管理员可删；有提交记录时仅 ADMIN 可强制删除（级联清理提交记录）。 */
     @Transactional
     public void delete(Long id) {
         Question question = getQuestionOrThrow(id);
         checkOwnerOrAdmin(question);
-        if (submissionMapper.existsByQuestionId(id)) {
-            throw new BusinessException(ResultCode.PARAM_ERROR, "该题目已有提交记录，不能删除");
+        AuthUser user = AuthContextHolder.get();
+        boolean admin = user != null && user.hasRole(Role.ADMIN);
+        if (submissionMapper.existsByQuestionId(id) && !admin) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "该题目已有提交记录，仅管理员可强制删除");
+        }
+        if (admin) {
+            submissionMapper.deleteByQuestionId(id);
         }
         testCaseMapper.deleteByQuestionId(id);
         questionMapper.deleteById(id);

@@ -94,12 +94,18 @@ public class ObjectiveQuestionService {
         return toVO(question, true);
     }
 
+    /** 删除客观题：无作答记录时出题人/管理员可删；有作答记录时仅 ADMIN 可强制删除（级联清理作答记录）。 */
     @Transactional
     public void delete(Long id) {
         ObjectiveQuestion question = getQuestionOrThrow(id);
         checkOwnerOrAdmin(question);
-        if (submissionMapper.existsByQuestionId(id)) {
-            throw new BusinessException(ResultCode.PARAM_ERROR, "该题目已有提交记录，不能删除");
+        AuthUser user = AuthContextHolder.get();
+        boolean admin = user != null && user.hasRole(Role.ADMIN);
+        if (submissionMapper.existsByQuestionId(id) && !admin) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "该题目已有提交记录，仅管理员可强制删除");
+        }
+        if (admin) {
+            submissionMapper.deleteByQuestionId(id);
         }
         mapper.deleteById(id);
     }

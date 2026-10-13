@@ -31,6 +31,9 @@ public interface ObjectiveSubmissionMapper {
     /** 题目是否存在作答记录（删除保护）。 */
     boolean existsByQuestionId(@Param("questionId") Long questionId);
 
+    /** 删除某题目的全部作答记录（ADMIN 强制删除题目时级联清理）。 */
+    int deleteByQuestionId(@Param("questionId") Long questionId);
+
     /** 按主键查询作答记录（重判用）。 */
     ObjectiveSubmission findById(Long id);
 

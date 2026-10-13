@@ -2,10 +2,13 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { adminApi } from '@/api/admin'
+import { objectiveApi } from '@/api/objective'
 import { ApiError } from '@/api/request'
 import AdminNav from '@/components/AdminNav.vue'
 import DataTable from '@/components/DataTable.vue'
 import Pagination from '@/components/Pagination.vue'
+import { useConfirm } from '@/composables/useConfirm'
+import { useToast } from '@/composables/useToast'
 import { useUserStore } from '@/stores/user'
 import type { ObjectiveType } from '@/types'
 
@@ -25,6 +28,8 @@ interface ObjectiveRow {
 
 const router = useRouter()
 const userStore = useUserStore()
+const { confirm } = useConfirm()
+const toast = useToast()
 
 const keyword = ref('')
 const typeFilter = ref<TypeFilter>('')
@@ -122,6 +127,23 @@ function goEdit(row: ObjectiveRow) {
   router.push(`/admin/objective-questions/${row.id}/edit`)
 }
 
+async function removeQuestion(row: ObjectiveRow) {
+  const ok = await confirm({
+    title: '删除客观题',
+    message: `确定删除该客观题吗？有提交记录的题目仅管理员可强制删除，其提交记录将被级联清理。`,
+    confirmText: '删除',
+    danger: true,
+  })
+  if (!ok) return
+  try {
+    await objectiveApi.remove(row.id)
+    toast.success('已删除该客观题')
+    load()
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : '删除失败')
+  }
+}
+
 onMounted(() => {
   load()
 })
@@ -193,6 +215,9 @@ onBeforeUnmount(() => {
       <template #actions="{ row }">
         <div class="row-actions">
           <button class="btn btn-ghost btn-sm" type="button" @click="goEdit(row)">编辑</button>
+          <button class="btn btn-ghost btn-sm btn-danger" type="button" @click="removeQuestion(row)">
+            删除
+          </button>
         </div>
       </template>
     </DataTable>
@@ -279,5 +304,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.btn-danger {
+  color: var(--danger);
 }
 </style>

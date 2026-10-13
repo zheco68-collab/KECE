@@ -77,4 +77,8 @@
         SELECT EXISTS(SELECT 1 FROM `objective_submission` WHERE question_id = #{questionId})
     </select>
 
+    <delete id="deleteByQuestionId">
+        DELETE FROM `objective_submission` WHERE question_id = #{questionId}
+    </delete>
+
 </mapper>

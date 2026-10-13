@@ -69,6 +69,10 @@
         SELECT EXISTS(SELECT 1 FROM `db_submission` WHERE question_id = #{questionId})
     </select>
 
+    <delete id="deleteByQuestionId">
+        DELETE FROM `db_submission` WHERE question_id = #{questionId}
+    </delete>
+
     <select id="findLatestByContest" resultMap="BaseResultMap">
         SELECT * FROM `db_submission`
         WHERE contest_id = #{contestId} AND user_id = #{userId} AND question_id = #{questionId}

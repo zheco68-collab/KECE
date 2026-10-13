@@ -34,6 +34,9 @@ public interface SubmissionMapper {
     /** 题目是否存在提交记录（删除保护）。 */
     boolean existsByQuestionId(@Param("questionId") Long questionId);
 
+    /** 删除某题目的全部提交记录（ADMIN 强制删除题目时级联清理）。 */
+    int deleteByQuestionId(@Param("questionId") Long questionId);
+
     /** 按考试场次+考生+题目查最新提交（考试成绩汇总用）。 */
     Submission findLatestByContest(
             @Param("contestId") Long contestId,

@@ -206,7 +206,7 @@ class ObjectiveQuestionIntegrationTest extends AbstractIntegrationTest {
         String student = registerStudent();
         submit(id, student, "B");
 
-        // 有作答记录的题禁删
+        // 有作答记录的题：出题人（非管理员）禁删
         MvcResult deleted =
                 mockMvc.perform(
                                 delete("/objective-questions/" + id)
@@ -214,7 +214,24 @@ class ObjectiveQuestionIntegrationTest extends AbstractIntegrationTest {
                         .andExpect(status().isOk())
                         .andReturn();
         assertThat(code(deleted)).isEqualTo(4001);
-        assertThat(body(deleted).path("message").asText()).isEqualTo("该题目已有提交记录，不能删除");
+        assertThat(body(deleted).path("message").asText())
+                .isEqualTo("该题目已有提交记录，仅管理员可强制删除");
+
+        // 管理员可强制删除（作答记录级联清理）
+        String admin = loginToken("admin", "admin123");
+        MvcResult forceDelete =
+                mockMvc.perform(
+                                delete("/objective-questions/" + id)
+                                        .header("Authorization", "Bearer " + admin))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        assertThat(code(forceDelete)).isEqualTo(200);
+
+        MvcResult after =
+                mockMvc.perform(get("/objective-questions/" + id))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        assertThat(code(after)).isEqualTo(4004);
     }
 
     @Test
