@@ -149,4 +149,102 @@ class QuestionIntegrationTest extends AbstractIntegrationTest {
                         .andReturn();
         assertThat(code(result)).isEqualTo(4003);
     }
+
+    @Test
+    void deleteQuestionWithSubmission_shouldBeRejected() throws Exception {
+        String token = teacherToken();
+        long id = createQuestion(token, "删除保护_" + UUID.randomUUID().toString().substring(0, 8));
+
+        // 学生提交代码（判题机未启动，记录停留在 PENDING 但已入库）
+        String username = "stu_" + UUID.randomUUID().toString().substring(0, 8);
+        mockMvc.perform(
+                        post("/auth/register")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        objectMapper.writeValueAsString(
+                                                Map.of(
+                                                        "username",
+                                                        username,
+                                                        "password",
+                                                        "pass123456"))))
+                .andExpect(status().isOk());
+        String studentToken = loginToken(username, "pass123456");
+        mockMvc.perform(
+                        post("/submissions")
+                                .header("Authorization", "Bearer " + studentToken)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        objectMapper.writeValueAsString(
+                                                Map.of(
+                                                        "questionId",
+                                                        id,
+                                                        "language",
+                                                        "cpp",
+                                                        "codeContent",
+                                                        Map.of(
+                                                                "main.cpp",
+                                                                "int main(){return 0;}")))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        // 有提交记录的题禁删
+        MvcResult deleteResult =
+                mockMvc.perform(
+                                delete("/questions/" + id)
+                                        .header("Authorization", "Bearer " + token))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        assertThat(code(deleteResult)).isEqualTo(4001);
+        assertThat(body(deleteResult).path("message").asText()).isEqualTo("该题目已有提交记录，不能删除");
+    }
+
+    @Test
+    void rejudgeInFlightSubmission_shouldReturnParamError() throws Exception {
+        String token = teacherToken();
+        long id = createQuestion(token, "重判并发_" + UUID.randomUUID().toString().substring(0, 8));
+
+        // 学生提交代码（判题机未启动，记录停留在 PENDING）
+        String username = "stu_" + UUID.randomUUID().toString().substring(0, 8);
+        mockMvc.perform(
+                        post("/auth/register")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        objectMapper.writeValueAsString(
+                                                Map.of(
+                                                        "username",
+                                                        username,
+                                                        "password",
+                                                        "pass123456"))))
+                .andExpect(status().isOk());
+        String studentToken = loginToken(username, "pass123456");
+        MvcResult submit =
+                mockMvc.perform(
+                                post("/submissions")
+                                        .header("Authorization", "Bearer " + studentToken)
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                objectMapper.writeValueAsString(
+                                                        Map.of(
+                                                                "questionId",
+                                                                id,
+                                                                "language",
+                                                                "cpp",
+                                                                "codeContent",
+                                                                Map.of(
+                                                                        "main.cpp",
+                                                                        "int main(){return 0;}")))))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        long submissionId = data(submit).path("submissionId").asLong();
+
+        // 评测中（PENDING）拒绝重判
+        MvcResult rejudge =
+                mockMvc.perform(
+                                post("/admin/submissions/" + submissionId + "/rejudge")
+                                        .header("Authorization", "Bearer " + token))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        assertThat(code(rejudge)).isEqualTo(4001);
+        assertThat(body(rejudge).path("message").asText()).isEqualTo("该提交正在评测中，请稍后再试");
+    }
 }

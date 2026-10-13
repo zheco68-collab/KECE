@@ -1,8 +1,10 @@
 package com.kece.objective;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -180,5 +182,100 @@ class ObjectiveQuestionIntegrationTest extends AbstractIntegrationTest {
                         .andExpect(status().isOk())
                         .andReturn();
         assertThat(data(teacherDetail).path("answer").asText()).isEqualTo("B");
+    }
+
+    @Test
+    void deleteQuestionWithSubmission_shouldBeRejected() throws Exception {
+        String token = teacherToken();
+        long id =
+                createQuestion(
+                        token,
+                        Map.of(
+                                "type",
+                                "SINGLE",
+                                "content",
+                                "3 + 3 = ?",
+                                "options",
+                                List.of("A. 5", "B. 6"),
+                                "answer",
+                                "B",
+                                "score",
+                                5));
+
+        // 学生作答后留痕一条客观题记录
+        String student = registerStudent();
+        submit(id, student, "B");
+
+        // 有作答记录的题禁删
+        MvcResult deleted =
+                mockMvc.perform(
+                                delete("/objective-questions/" + id)
+                                        .header("Authorization", "Bearer " + token))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        assertThat(code(deleted)).isEqualTo(4001);
+        assertThat(body(deleted).path("message").asText()).isEqualTo("该题目已有提交记录，不能删除");
+    }
+
+    @Test
+    void rejudgeQuestionShouldReapplyCurrentAnswerAndScore() throws Exception {
+        String token = teacherToken();
+        long qid =
+                createQuestion(
+                        token,
+                        Map.of(
+                                "type",
+                                "SINGLE",
+                                "content",
+                                "4 + 4 = ?",
+                                "options",
+                                List.of("A. 7", "B. 8"),
+                                "answer",
+                                "B",
+                                "score",
+                                5));
+        String student = registerStudent();
+        submit(qid, student, "A"); // 答错，score 0
+
+        // 老师发现答案设错了，把正确答案改成 A（重判的真实场景：改答案后让存量作答与新答案一致）
+        mockMvc.perform(
+                        put("/objective-questions/" + qid)
+                                .header("Authorization", "Bearer " + token)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        objectMapper.writeValueAsString(
+                                                Map.of(
+                                                        "type",
+                                                        "SINGLE",
+                                                        "content",
+                                                        "4 + 4 = ?",
+                                                        "options",
+                                                        List.of("A. 7", "B. 8"),
+                                                        "answer",
+                                                        "A",
+                                                        "score",
+                                                        5))))
+                .andExpect(status().isOk());
+
+        // 按题批量重判
+        MvcResult rejudge =
+                mockMvc.perform(
+                                post("/admin/objective-questions/" + qid + "/rejudge")
+                                        .header("Authorization", "Bearer " + token))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        assertThat(code(rejudge)).isEqualTo(200);
+        assertThat(data(rejudge).path("rejudged").asInt()).isEqualTo(1);
+
+        // 学生侧作答列表应已更新为答对
+        MvcResult list =
+                mockMvc.perform(
+                                get("/objective-submissions")
+                                        .header("Authorization", "Bearer " + student))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        JsonNode first = data(list).path("list").get(0);
+        assertThat(first.path("correct").asInt()).isEqualTo(1);
+        assertThat(first.path("score").asInt()).isEqualTo(5);
     }
 }

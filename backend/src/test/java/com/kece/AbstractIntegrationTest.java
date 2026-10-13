@@ -17,35 +17,59 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
-/** 集成测试基类：共享 Testcontainers MySQL/Redis，MockMvc 直连 DispatcherServlet（不含 context-path）。 */
-@Testcontainers
+/**
+ * 集成测试基类。
+ * <p>
+ * 默认使用 Testcontainers 启动 MySQL/Redis；当系统属性 {@code test.local=true} 时，
+ * 回退到本机 MySQL(kece/kece123@localhost:3306) 与 Redis(localhost:6379)，
+ * 用于 Docker/Testcontainers 不可用的环境。
+ */
 @SpringBootTest
 @AutoConfigureMockMvc
 public abstract class AbstractIntegrationTest {
 
-    @Container
-    static final MySQLContainer<?> MYSQL =
-            new MySQLContainer<>("mysql:8.0")
-                    .withDatabaseName("kece")
-                    .withUsername("kece")
-                    .withPassword("kece123")
-                    .withUrlParam("allowPublicKeyRetrieval", "true")
-                    .withUrlParam("useSSL", "false");
+    private static final boolean USE_LOCAL = Boolean.getBoolean("test.local");
 
-    @Container
-    static final GenericContainer<?> REDIS =
-            new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
+    private static final MySQLContainer<?> MYSQL;
+    private static final GenericContainer<?> REDIS;
+
+    static {
+        if (USE_LOCAL) {
+            MYSQL = null;
+            REDIS = null;
+        } else {
+            MYSQL =
+                    new MySQLContainer<>("mysql:8.0")
+                            .withDatabaseName("kece")
+                            .withUsername("kece")
+                            .withPassword("kece123")
+                            .withUrlParam("allowPublicKeyRetrieval", "true")
+                            .withUrlParam("useSSL", "false");
+            REDIS = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
+            MYSQL.start();
+            REDIS.start();
+        }
+    }
 
     @DynamicPropertySource
     static void datasourceProps(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
-        registry.add("spring.datasource.username", MYSQL::getUsername);
-        registry.add("spring.datasource.password", MYSQL::getPassword);
-        registry.add("spring.data.redis.host", REDIS::getHost);
-        registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
+        if (USE_LOCAL) {
+            registry.add(
+                    "spring.datasource.url",
+                    () ->
+                            "jdbc:mysql://localhost:3306/kece?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci");
+            registry.add("spring.datasource.username", () -> "kece");
+            registry.add("spring.datasource.password", () -> "kece123");
+            registry.add("spring.data.redis.host", () -> "localhost");
+            registry.add("spring.data.redis.port", () -> 6379);
+        } else {
+            registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
+            registry.add("spring.datasource.username", MYSQL::getUsername);
+            registry.add("spring.datasource.password", MYSQL::getPassword);
+            registry.add("spring.data.redis.host", REDIS::getHost);
+            registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
+        }
     }
 
     @Autowired protected MockMvc mockMvc;

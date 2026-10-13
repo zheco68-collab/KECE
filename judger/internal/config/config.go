@@ -3,6 +3,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -69,7 +70,7 @@ func Load() Config {
 		TakeTimeout:       time.Duration(getenvInt("TAKE_TIMEOUT_SECONDS", 2)) * time.Second,
 		CompileTimeout:    time.Duration(getenvInt("COMPILE_TIMEOUT_SECONDS", 30)) * time.Second,
 		CompileMemoryMb:   getenvInt("COMPILE_MEMORY_MB", 1024),
-		WorkspaceDir:      getenv("WORKSPACE_DIR", "/tmp/judge"),
+		WorkspaceDir:      getenv("WORKSPACE_DIR", filepath.Join(os.TempDir(), "judge")),
 		WorkerID:          getenv("WORKER_ID", hostname()),
 		Images: Images{
 			CPP:    getenv("IMAGE_CPP", "gcc:13"),

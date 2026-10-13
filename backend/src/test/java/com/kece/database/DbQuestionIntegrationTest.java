@@ -321,6 +321,26 @@ class DbQuestionIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void deleteQuestionWithSubmission_shouldBeRejected() throws Exception {
+        String token = teacherToken();
+        long id = createQuestion(token, selectQuestion(uniqueTitle("del-protect")));
+
+        // 学生提交 SQL（判题机未启动，记录停留在 PENDING 但已入库）
+        String student = registerStudent();
+        submit(id, student, "SELECT id FROM emp");
+
+        // 有提交记录的题禁删
+        MvcResult deleted =
+                mockMvc.perform(
+                                delete("/db-questions/" + id)
+                                        .header("Authorization", "Bearer " + token))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        assertThat(code(deleted)).isEqualTo(4001);
+        assertThat(body(deleted).path("message").asText()).isEqualTo("该题目已有提交记录，不能删除");
+    }
+
+    @Test
     void createShouldBeForbiddenForRegularUser() throws Exception {
         String student = registerStudent();
         MvcResult result =

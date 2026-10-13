@@ -1,0 +1,21 @@
+server:
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+mybatis:
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.kece.**.entity
+  configuration:
+    map-underscore-to-camel-case: true
+
+kece:
+  jwt:
+    secret: test-jwt-secret-key-please-change-in-production-min-32-chars
+    expiration: 86400000
+    refresh-expiration: 604800000
+  demo-data:
+    enabled: true
+
