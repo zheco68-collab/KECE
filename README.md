@@ -52,8 +52,8 @@
 
 | 阶段 | 目标 | 状态 |
 |---|---|---|
-| Phase 1（MVP） | 注册/题库/算法沙箱评测/客观题 | 进行中（Sprint 1、Sprint 2 完成） |
-| Phase 2 | 数据库 OJ（已完成）+ 组卷倒计时考试 + 消息队列 | 进行中 |
+| Phase 1（MVP） | 注册/题库/算法沙箱评测/客观题 | 已完成（含数据库 OJ、后台管理 P0–P6） |
+| Phase 2 | 数据库 OJ + 组卷倒计时考试 + 消息队列 | 进行中（数据库 OJ/消息队列已完成，组卷考试开发中） |
 | Phase 3 | 前端多文件编辑器 + Playwright + LLM AI 评测 | 待开始 |
 | Phase 4 | 防作弊 + 数据大屏 + 判题集群扩容 | 待开始 |
 
@@ -105,10 +105,13 @@ docker run -d --name kece-redis --restart unless-stopped -p 6379:6379 redis:7-al
 后端：
 ```bash
 cd backend
+# dev profile 开启演示数据：种子账号 admin/admin123、teacher/teacher123 与示例题目/作答
+$env:SPRING_PROFILES_ACTIVE = "dev"   # Windows PowerShell；bash 用 export SPRING_PROFILES_ACTIVE=dev
 ./mvnw spring-boot:run    # Windows 用 mvnw.cmd spring-boot:run
 ```
 - API: http://localhost:8080/api/v1
 - Swagger: http://localhost:8080/api/v1/swagger-ui.html
+- 演示数据开关 `kece.demo-data.enabled` 默认关（生产不播种默认口令账号），仅 dev profile 开启
 
 前端：
 ```bash

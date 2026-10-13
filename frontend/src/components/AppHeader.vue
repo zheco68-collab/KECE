@@ -1,20 +1,20 @@
 <script setup lang="ts">
-import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { useUserStore } from '@/stores/user'
+import { RouterLink, useRoute, useRouter } from 'vue-router';
+import { useUserStore } from '@/stores/user';
 
-const route = useRoute()
-const router = useRouter()
-const userStore = useUserStore()
+const route = useRoute();
+const router = useRouter();
+const userStore = useUserStore();
 
 // 按路径段匹配，避免 /database 与其详情页 /database/:id 同时高亮。
 function isActive(path: string): boolean {
-  if (path === '/') return route.path === '/'
-  return route.path === path || route.path.startsWith(path + '/')
+  if (path === '/') return route.path === '/';
+  return route.path === path || route.path.startsWith(path + '/');
 }
 
 function logout() {
-  userStore.clearAuth()
-  router.push('/login')
+  userStore.clearAuth();
+  router.push('/login');
 }
 </script>
 
@@ -30,6 +30,7 @@ function logout() {
         <RouterLink to="/database" :class="{ active: isActive('/database') }">数据库</RouterLink>
         <RouterLink to="/frontend" :class="{ active: isActive('/frontend') }">前端</RouterLink>
         <RouterLink to="/objective" :class="{ active: isActive('/objective') }">客观题</RouterLink>
+        <RouterLink to="/exams" :class="{ active: isActive('/exams') }">考试</RouterLink>
         <RouterLink
           v-if="userStore.isLoggedIn"
           to="/submissions"

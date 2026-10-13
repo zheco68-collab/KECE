@@ -1,21 +1,22 @@
 <script setup lang="ts">
-import { RouterLink, useRoute } from 'vue-router'
-import { useUserStore } from '@/stores/user'
+import { RouterLink, useRoute } from 'vue-router';
+import { useUserStore } from '@/stores/user';
 
-const route = useRoute()
-const userStore = useUserStore()
+const route = useRoute();
+const userStore = useUserStore();
 
 /** 后台各分区入口：编辑页归入对应分区的激活态。 */
 const sections = [
   { path: '/admin/questions', label: '编程题' },
   { path: '/admin/db-questions', label: '数据库题' },
   { path: '/admin/objective-questions', label: '客观题' },
+  { path: '/admin/exams', label: '考试管理' },
   { path: '/admin/users', label: '用户管理', adminOnly: true },
   { path: '/admin/submissions', label: '提交监控' },
-]
+];
 
 function isActive(path: string): boolean {
-  return route.path === path || route.path.startsWith(path + '/')
+  return route.path === path || route.path.startsWith(path + '/');
 }
 </script>
 

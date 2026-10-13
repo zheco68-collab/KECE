@@ -1,10 +1,10 @@
-import { createRouter, createWebHistory } from 'vue-router'
-import { useUserStore } from '@/stores/user'
+import { createRouter, createWebHistory } from 'vue-router';
+import { useUserStore } from '@/stores/user';
 
 // 路由元信息类型声明：meta.roles 是后台路由的角色门槛。
 declare module 'vue-router' {
   interface RouteMeta {
-    roles?: string[]
+    roles?: string[];
   }
 }
 
@@ -60,6 +60,21 @@ const router = createRouter({
           path: 'objective/:id',
           name: 'objective-detail',
           component: () => import('@/views/ObjectiveAnswerView.vue'),
+        },
+        {
+          path: 'exams',
+          name: 'exams',
+          component: () => import('@/views/ExamListView.vue'),
+        },
+        {
+          path: 'exams/:id',
+          name: 'exam-session',
+          component: () => import('@/views/ExamSessionView.vue'),
+        },
+        {
+          path: 'exams/:id/result',
+          name: 'exam-result',
+          component: () => import('@/views/ExamResultView.vue'),
         },
         {
           path: 'admin',
@@ -121,6 +136,24 @@ const router = createRouter({
           meta: { roles: ['ADMIN', 'TEACHER'] },
         },
         {
+          path: 'admin/exams',
+          name: 'admin-exams',
+          component: () => import('@/views/admin/AdminExamsView.vue'),
+          meta: { roles: ['ADMIN', 'TEACHER'] },
+        },
+        {
+          path: 'admin/exams/new',
+          name: 'admin-exam-new',
+          component: () => import('@/views/admin/ExamEditView.vue'),
+          meta: { roles: ['ADMIN', 'TEACHER'] },
+        },
+        {
+          path: 'admin/exams/:id/edit',
+          name: 'admin-exam-edit',
+          component: () => import('@/views/admin/ExamEditView.vue'),
+          meta: { roles: ['ADMIN', 'TEACHER'] },
+        },
+        {
           path: 'admin/users',
           name: 'admin-users',
           component: () => import('@/views/admin/AdminUsersView.vue'),
@@ -142,25 +175,25 @@ const router = createRouter({
       component: () => import('@/views/NotFoundView.vue'),
     },
   ],
-})
+});
 
 // 已登录用户访问登录/注册页时跳回首页；带 roles 的页面做角色校验
 router.beforeEach((to) => {
-  const userStore = useUserStore()
+  const userStore = useUserStore();
   if ((to.name === 'login' || to.name === 'register') && userStore.isLoggedIn) {
-    return { name: 'home' }
+    return { name: 'home' };
   }
-  const roles = to.meta.roles
+  const roles = to.meta.roles;
   if (roles && roles.length > 0) {
     if (!userStore.isLoggedIn) {
-      return { name: 'login', query: { redirect: to.fullPath } }
+      return { name: 'login', query: { redirect: to.fullPath } };
     }
     // 角色不符时按不存在处理，不暴露页面是否存在
     if (!roles.some((role) => userStore.hasRole(role))) {
-      return { name: 'not-found' }
+      return { name: 'not-found' };
     }
   }
-  return true
-})
+  return true;
+});
 
-export default router
+export default router;
