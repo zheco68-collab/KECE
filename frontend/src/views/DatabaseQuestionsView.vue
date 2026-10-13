@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { databaseApi } from '@/api/database'
+import { useUserStore } from '@/stores/user'
 import type { DbQuestion, DbQuestionType } from '@/types'
 
 const keyword = ref('')
@@ -13,6 +14,9 @@ const list = ref<DbQuestion[]>([])
 const total = ref(0)
 const loading = ref(false)
 const error = ref('')
+
+const userStore = useUserStore()
+const solved = ref<Set<number>>(new Set())
 
 const typeLabels: Record<DbQuestionType, string> = {
   SELECT: '查询',
@@ -46,12 +50,25 @@ function changePage(p: number) {
   load()
 }
 
+async function loadSolved() {
+  if (!userStore.isLoggedIn) return
+  try {
+    const ids = await databaseApi.solved()
+    solved.value = new Set(ids)
+  } catch {
+    /* 未登录或加载失败时忽略，仅不显示已通过标记 */
+  }
+}
+
 watch([keyword, type], () => {
   page.value = 1
   load()
 })
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadSolved()
+})
 </script>
 
 <template>
@@ -86,6 +103,7 @@ onMounted(load)
       <RouterLink v-for="q in list" :key="q.id" :to="`/database/${q.id}`" class="db-item card">
         <span class="badge" :class="`type-${q.type.toLowerCase()}`">{{ typeLabels[q.type] }}</span>
         <span class="db-title">{{ q.title }}</span>
+        <span v-if="solved.has(q.id)" class="solved-mark" title="已通过">✓</span>
       </RouterLink>
     </div>
 
@@ -170,6 +188,13 @@ onMounted(load)
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 500;
+}
+.solved-mark {
+  color: var(--success);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
 }
 .pagination {
   display: flex;

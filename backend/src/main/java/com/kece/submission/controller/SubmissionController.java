@@ -10,6 +10,7 @@ import com.kece.submission.service.SubmissionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -43,6 +44,13 @@ public class SubmissionController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.success(submissionService.list(status, page, size));
+    }
+
+    @Operation(summary = "当前用户已通过的题目 id 列表")
+    @RequireRole
+    @GetMapping("/solved")
+    public ApiResponse<List<Long>> solved() {
+        return ApiResponse.success(submissionService.solvedQuestionIds());
     }
 
     @Operation(summary = "查询评测状态与结果（轮询）")

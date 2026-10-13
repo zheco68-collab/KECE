@@ -2,6 +2,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { questionApi } from '@/api/question'
+import { submissionApi } from '@/api/submission'
+import { useUserStore } from '@/stores/user'
 import type { Difficulty, Question } from '@/types'
 
 const keyword = ref('')
@@ -13,6 +15,9 @@ const list = ref<Question[]>([])
 const total = ref(0)
 const loading = ref(false)
 const error = ref('')
+
+const userStore = useUserStore()
+const solved = ref<Set<number>>(new Set())
 
 const difficultyLabels: Record<Difficulty, string> = {
   EASY: '简单',
@@ -47,12 +52,25 @@ function changePage(p: number) {
   load()
 }
 
+async function loadSolved() {
+  if (!userStore.isLoggedIn) return
+  try {
+    const ids = await submissionApi.solved()
+    solved.value = new Set(ids)
+  } catch {
+    /* 未登录或加载失败时忽略，仅不显示已通过标记 */
+  }
+}
+
 watch([keyword, difficulty], () => {
   page.value = 1
   load()
 })
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadSolved()
+})
 </script>
 
 <template>
@@ -92,9 +110,12 @@ onMounted(load)
           <h3 class="q-title">{{ q.title }}</h3>
           <p class="q-meta">{{ q.timeLimit ?? '-' }} ms · {{ q.memoryLimit ?? '-' }} MB</p>
         </div>
-        <span class="badge" :class="`difficulty-${q.difficulty.toLowerCase()}`">
-          {{ difficultyLabels[q.difficulty] }}
-        </span>
+        <div class="q-right">
+          <span class="badge" :class="`difficulty-${q.difficulty.toLowerCase()}`">
+            {{ difficultyLabels[q.difficulty] }}
+          </span>
+          <span v-if="solved.has(q.id)" class="solved-mark" title="已通过">✓</span>
+        </div>
       </RouterLink>
     </div>
 
@@ -174,6 +195,18 @@ onMounted(load)
 }
 .q-main {
   min-width: 0;
+}
+.q-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.solved-mark {
+  color: var(--success);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
 }
 .q-title {
   margin: 0 0 6px;

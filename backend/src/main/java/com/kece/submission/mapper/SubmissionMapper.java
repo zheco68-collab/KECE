@@ -22,6 +22,9 @@ public interface SubmissionMapper {
 
     long count(@Param("userId") Long userId, @Param("status") String status);
 
+    /** 当前用户已 AC 的题目 id（去重）。 */
+    List<Long> findAcceptedQuestionIds(@Param("userId") Long userId);
+
     int updateResult(
             @Param("id") Long id,
             @Param("status") String status,

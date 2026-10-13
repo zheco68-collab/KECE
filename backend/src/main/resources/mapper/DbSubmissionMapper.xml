@@ -52,6 +52,11 @@
         </where>
     </select>
 
+    <select id="findAcceptedQuestionIds" resultType="long">
+        SELECT DISTINCT question_id FROM `db_submission`
+        WHERE user_id = #{userId} AND status = 'ACCEPTED'
+    </select>
+
     <update id="updateResult">
         UPDATE `db_submission`
         <set>

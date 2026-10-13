@@ -110,6 +110,15 @@ public class DbSubmissionService {
         return new PageResult<>(list, total, safePage, safeSize);
     }
 
+    /** 当前用户已 AC 的数据库题目 id（去重），供题目列表标记「已通过」。 */
+    public List<Long> solvedQuestionIds() {
+        Long userId = AuthContextHolder.currentUserId();
+        if (userId == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        return submissionMapper.findAcceptedQuestionIds(userId);
+    }
+
     /** 查询评测状态与结果：优先命中 Redis 状态缓存，缺失时回退 MySQL。 */
     public SubmissionVO get(Long id) {
         AuthUser user = AuthContextHolder.get();

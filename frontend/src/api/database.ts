@@ -30,4 +30,6 @@ export const databaseApi = {
   listSubmissions: (params?: DbSubmissionListParams) =>
     http.get<PageResult<DbSubmissionRecord>>('/db-submissions', { params }),
   getSubmission: (id: number | string) => http.get<Submission>(`/db-submissions/${id}`),
+  /** 当前用户已通过的数据库题目 id 列表。 */
+  solved: () => http.get<number[]>('/db-submissions/solved'),
 }
