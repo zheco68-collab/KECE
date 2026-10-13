@@ -1,7 +1,12 @@
-# KECE 停止脚本 (Windows PowerShell)
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+﻿# KECE 停止脚本：结束后端/判题机/前端三个本地进程。
+# judge-mysql / redis 容器与原生 MySQL 保留（它们是常驻基础设施，随 Docker 重启自动拉起）。
 
-Write-Host "Stopping KECE services..." -ForegroundColor Cyan
-docker compose -f "$ScriptDir\docker-compose.yml" down
+Stop-Process -Name judger -Force -ErrorAction SilentlyContinue
 
-Write-Host "Services stopped." -ForegroundColor Green
+foreach ($Port in 8080, 5173) {
+    Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty OwningProcess -Unique |
+        ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+}
+
+Write-Host "已停止后端(8080)/判题机/前端(5173)。容器与原生 MySQL 保留。" -ForegroundColor Green

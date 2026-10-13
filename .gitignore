@@ -54,6 +54,7 @@ out/
 
 # Logs
 logs/
+.logs/
 *.log
 
 # Coverage

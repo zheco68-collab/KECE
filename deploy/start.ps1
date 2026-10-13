@@ -1,16 +1,95 @@
-# KECE 一键启动脚本 (Windows PowerShell)
+﻿# KECE 本地开发启动器 (Windows PowerShell)
+#
+# 不再 docker compose 起整套容器：复用已在运行的原生 MySQL(3306) 与 judge-mysql/redis 容器，
+# 在后台拉起后端(mvnw)/判题机(judger.exe)/前端(npm run dev)三个本地进程，日志写入仓库 .logs/。
+# 已运行的进程/容器会被自动跳过，因此可安全重复执行。
+
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RootDir = Resolve-Path "$ScriptDir\.."
+$RootDir   = (Resolve-Path "$ScriptDir\..").Path
+$LogDir    = Join-Path $RootDir ".logs"
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
-Write-Host "Starting KECE services..." -ForegroundColor Cyan
-docker compose -f "$ScriptDir\docker-compose.yml" up -d --build
+function Test-Port([int]$Port) {
+    return $null -ne (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+}
+
+# ---- 0. 工具链（本机路径，可用同名环境变量覆盖） ----
+if (-not $env:JAVA_HOME) { $env:JAVA_HOME = "C:\Users\zco\.jdks\jdk-17.0.20.1+1" }
+if (-not $env:GOROOT)   { $env:GOROOT   = "C:\Users\zco\go-sdk\go" }
+if (-not $env:GOPROXY)  { $env:GOPROXY  = "https://goproxy.cn,direct" }
+$env:PATH = "$env:GOROOT\bin;$env:JAVA_HOME\bin;$env:PATH"
+
+# ---- 1. 基础设施：judge-mysql / redis 容器（原生 MySQL 不在此启动，见下方提示） ----
+if (-not (Test-Port 3306)) {
+    Write-Warning "3306 无监听：业务 MySQL 未启动，后端将无法连库。请先启动本机 MySQL 服务。"
+}
+
+if (docker ps -a --format "{{.Names}}" | Select-String -Quiet "^kece-judge-mysql$") {
+    if (-not (docker ps --format "{{.Names}}" | Select-String -Quiet "^kece-judge-mysql$")) {
+        docker start kece-judge-mysql | Out-Null
+    }
+} else {
+    docker run -d --name kece-judge-mysql --restart unless-stopped `
+      -p 3307:3306 -e MYSQL_ROOT_PASSWORD=judge123 mysql:8.0 `
+      --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci | Out-Null
+}
+
+if (docker ps -a --format "{{.Names}}" | Select-String -Quiet "^kece-redis$") {
+    if (-not (docker ps --format "{{.Names}}" | Select-String -Quiet "^kece-redis$")) {
+        docker start kece-redis | Out-Null
+    }
+} else {
+    docker run -d --name kece-redis --restart unless-stopped -p 6379:6379 redis:7-alpine | Out-Null
+}
+
+# ---- 2. 判题机（先编译再后台启动） ----
+if (Get-Process -Name judger -ErrorAction SilentlyContinue) {
+    Write-Host "判题机已在运行，跳过" -ForegroundColor Yellow
+} else {
+    Push-Location "$RootDir\judger"
+    try {
+        go build -o judger.exe ./cmd/judger
+        if (-not (Test-Path "judger.exe")) { throw "判题机编译失败，未生成 judger.exe" }
+    } finally { Pop-Location }
+
+    $env:REDIS_ADDR           = if ($env:REDIS_ADDR)           { $env:REDIS_ADDR }           else { "127.0.0.1:6379" }
+    $env:WORKSPACE_DIR        = if ($env:WORKSPACE_DIR)        { $env:WORKSPACE_DIR }        else { "C:\Users\zco\judge-workspace" }
+    $env:JUDGE_MYSQL_HOST     = if ($env:JUDGE_MYSQL_HOST)     { $env:JUDGE_MYSQL_HOST }     else { "127.0.0.1" }
+    $env:JUDGE_MYSQL_PORT     = if ($env:JUDGE_MYSQL_PORT)     { $env:JUDGE_MYSQL_PORT }     else { "3307" }
+    $env:JUDGE_MYSQL_USER     = if ($env:JUDGE_MYSQL_USER)     { $env:JUDGE_MYSQL_USER }     else { "root" }
+    $env:JUDGE_MYSQL_PASSWORD = if ($env:JUDGE_MYSQL_PASSWORD) { $env:JUDGE_MYSQL_PASSWORD } else { "judge123" }
+
+    Start-Process -FilePath "$RootDir\judger\judger.exe" -WorkingDirectory "$RootDir\judger" `
+      -RedirectStandardOutput (Join-Path $LogDir "judger.log") `
+      -RedirectStandardError  (Join-Path $LogDir "judger.err.log") -WindowStyle Hidden
+    Write-Host "判题机已启动（日志：.logs\judger.log）" -ForegroundColor Green
+}
+
+# ---- 3. 后端 ----
+if (Test-Port 8080) {
+    Write-Host "后端已在运行 (8080)，跳过" -ForegroundColor Yellow
+} else {
+    Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$RootDir\backend\mvnw.cmd`" spring-boot:run" `
+      -WorkingDirectory "$RootDir\backend" `
+      -RedirectStandardOutput (Join-Path $LogDir "backend.log") `
+      -RedirectStandardError  (Join-Path $LogDir "backend.err.log") -WindowStyle Hidden
+    Write-Host "后端已启动 (8080)…" -ForegroundColor Green
+}
+
+# ---- 4. 前端 ----
+if (Test-Port 5173) {
+    Write-Host "前端已在运行 (5173)，跳过" -ForegroundColor Yellow
+} else {
+    Start-Process -FilePath "cmd.exe" -ArgumentList "/c npm run dev" `
+      -WorkingDirectory "$RootDir\frontend" `
+      -RedirectStandardOutput (Join-Path $LogDir "frontend.log") `
+      -RedirectStandardError  (Join-Path $LogDir "frontend.err.log") -WindowStyle Hidden
+    Write-Host "前端已启动 (5173)…" -ForegroundColor Green
+}
 
 Write-Host ""
-Write-Host "Services started:" -ForegroundColor Green
-Write-Host "  Backend API:  http://localhost:8080/api/v1"
-Write-Host "  Swagger UI:   http://localhost:8080/api/v1/swagger-ui.html"
-Write-Host "  Frontend:     http://localhost:5173 (run 'npm run dev' in frontend/)"
-Write-Host ""
-Write-Host "To stop:  .\stop.ps1"
-Write-Host "To logs:  docker compose -f deploy/docker-compose.yml logs -f"
+Write-Host "后端  http://localhost:8080/api/v1" -ForegroundColor Cyan
+Write-Host "前端  http://localhost:5173"        -ForegroundColor Cyan
+Write-Host "日志  $LogDir"
+Write-Host "停止  .\deploy\stop.ps1"

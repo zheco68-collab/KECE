@@ -1,8 +1,9 @@
 #!/bin/bash
-# KECE 停止脚本 (Linux/macOS)
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# KECE 停止脚本：结束后端/判题机/前端三个本地进程。
+# judge-mysql / redis 容器与原生 MySQL 保留。
 
-echo "Stopping KECE services..."
-docker compose -f "$SCRIPT_DIR/docker-compose.yml" down
+pkill -x judger 2>/dev/null || true
+pkill -f 'mvnw spring-boot:run' 2>/dev/null || true
+pkill -f 'vite' 2>/dev/null || true
 
-echo "Services stopped."
+echo "已停止后端/判题机/前端。容器与原生 MySQL 保留。"

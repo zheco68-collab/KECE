@@ -75,29 +75,42 @@ KECE/
 - Node.js 20+
 - Java 17+
 - Go 1.22+
-- Docker & Docker Compose
+- Docker Desktop（判题机拉沙箱容器 + judge-mysql/redis 容器）
+- 本机已运行的 MySQL 8.0（业务库 `kece`，账号 `kece/kece123`）
 
-### 启动依赖服务（MySQL + Redis + 判题 MySQL）
+### 一键启动（推荐）
+启动脚本会确保 `judge-mysql`（3307）与 `redis`（6379）两个容器在跑、编译判题机，
+然后在后台拉起后端、判题机、前端三个本地进程（已运行的自动跳过，日志写入 `.logs/`）：
 ```bash
-cd deploy
-docker compose up -d mysql redis judge-mysql
+# Windows PowerShell
+deploy\start.ps1
+# Linux/macOS
+./deploy/start.sh
 ```
-本地非容器化运行判题机时，判题 MySQL 可单独拉起（宿主机端口 3307）：
+停止（容器与原生 MySQL 保留）：
+```bash
+deploy\stop.ps1    # 或 ./deploy/stop.sh
+```
+
+> 业务 MySQL 不在脚本内启动，请保持本机 MySQL 服务运行在 3306。
+
+### 手动分步启动（便于排查）
+依赖容器可单独拉起：
 ```bash
 docker run -d --name kece-judge-mysql --restart unless-stopped \
   -p 3307:3306 -e MYSQL_ROOT_PASSWORD=judge123 mysql:8.0 \
   --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+docker run -d --name kece-redis --restart unless-stopped -p 6379:6379 redis:7-alpine
 ```
-
-### 后端
+后端：
 ```bash
 cd backend
-./mvnw spring-boot:run
+./mvnw spring-boot:run    # Windows 用 mvnw.cmd spring-boot:run
 ```
 - API: http://localhost:8080/api/v1
 - Swagger: http://localhost:8080/api/v1/swagger-ui.html
 
-### 前端
+前端：
 ```bash
 cd frontend
 npm install
@@ -105,12 +118,12 @@ npm run dev
 ```
 - 页面: http://localhost:5173
 
-### 一键全量启动（含后端 + 判题机）
+判题机（Windows 需先把 go 加入 PATH 或设 GOROOT，默认值见 start.ps1）：
 ```bash
-# Windows
-deploy\start.ps1
-# Linux/macOS
-./deploy/start.sh
+cd judger
+go build -o judger.exe ./cmd/judger    # Linux/macOS 去掉 .exe
+REDIS_ADDR=127.0.0.1:6379 JUDGE_MYSQL_HOST=127.0.0.1 JUDGE_MYSQL_PORT=3307 \
+JUDGE_MYSQL_USER=root JUDGE_MYSQL_PASSWORD=judge123 ./judger.exe
 ```
 
 > **判题机沙箱镜像**：判题机通过宿主机 Docker daemon 拉起沙箱容器，首次判题会按需拉取
