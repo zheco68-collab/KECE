@@ -17,6 +17,9 @@ public interface ObjectiveQuestionMapper {
 
     ObjectiveQuestion findById(Long id);
 
+    /** 按题干精确查找，供种子数据幂等判重。 */
+    ObjectiveQuestion findByContent(@Param("content") String content);
+
     List<ObjectiveQuestion> findPage(
             @Param("type") String type,
             @Param("keyword") String keyword,

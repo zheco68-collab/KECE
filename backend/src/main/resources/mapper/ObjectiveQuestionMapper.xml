@@ -38,6 +38,10 @@
         SELECT * FROM `objective_question` WHERE id = #{id}
     </select>
 
+    <select id="findByContent" resultMap="BaseResultMap">
+        SELECT * FROM `objective_question` WHERE content = #{content} LIMIT 1
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO `objective_question` (type, content, options, answer, match_type, score, created_by)
         VALUES (#{type}, #{content}, #{options}, #{answer}, #{matchType}, #{score}, #{createdBy})
