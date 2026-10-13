@@ -6,7 +6,7 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
-// 按路径段匹配，避免 /database 与 /database-submissions 同时高亮。
+// 按路径段匹配，避免 /database 与其详情页 /database/:id 同时高亮。
 function isActive(path: string): boolean {
   if (path === '/') return route.path === '/'
   return route.path === path || route.path.startsWith(path + '/')
@@ -35,12 +35,6 @@ function logout() {
           to="/submissions"
           :class="{ active: isActive('/submissions') }"
           >我的提交</RouterLink
-        >
-        <RouterLink
-          v-if="userStore.isLoggedIn"
-          to="/database-submissions"
-          :class="{ active: isActive('/database-submissions') }"
-          >数据库提交</RouterLink
         >
       </nav>
       <div class="header-right">

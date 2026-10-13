@@ -36,8 +36,7 @@ const router = createRouter({
         },
         {
           path: 'database-submissions',
-          name: 'database-submissions',
-          component: () => import('@/views/DatabaseSubmissionsView.vue'),
+          redirect: '/submissions',
         },
         {
           path: 'frontend',
