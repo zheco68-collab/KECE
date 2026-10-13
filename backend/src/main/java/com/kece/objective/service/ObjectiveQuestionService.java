@@ -12,8 +12,11 @@ import com.kece.objective.dto.AnswerResultVO;
 import com.kece.objective.dto.AnswerSubmitRequest;
 import com.kece.objective.dto.ObjectiveQuestionRequest;
 import com.kece.objective.dto.ObjectiveQuestionVO;
+import com.kece.objective.dto.ObjectiveSubmissionListVO;
 import com.kece.objective.entity.ObjectiveQuestion;
+import com.kece.objective.entity.ObjectiveSubmission;
 import com.kece.objective.mapper.ObjectiveQuestionMapper;
+import com.kece.objective.mapper.ObjectiveSubmissionMapper;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ObjectiveQuestionService {
 
     private final ObjectiveQuestionMapper mapper;
+    private final ObjectiveSubmissionMapper submissionMapper;
     private final ObjectiveGrader grader;
     private final ObjectMapper objectMapper;
 
@@ -69,9 +73,48 @@ public class ObjectiveQuestionService {
         mapper.deleteById(id);
     }
 
+    /** 作答并即时判分，同时留痕一条作答记录（可重复作答，逐次记录）。 */
+    @Transactional
     public AnswerResultVO submit(Long id, AnswerSubmitRequest request) {
         ObjectiveQuestion question = getQuestionOrThrow(id);
-        return grader.grade(question, request.getAnswer());
+        AnswerResultVO result = grader.grade(question, request.getAnswer());
+
+        Long userId = AuthContextHolder.currentUserId();
+        if (userId != null) {
+            ObjectiveSubmission submission = new ObjectiveSubmission();
+            submission.setUserId(userId);
+            submission.setQuestionId(id);
+            submission.setAnswer(request.getAnswer());
+            submission.setCorrect(result.isCorrect() ? 1 : 0);
+            submission.setScore(result.getScore());
+            submissionMapper.insert(submission);
+        }
+        return result;
+    }
+
+    /** 当前用户已答对的客观题 id（去重），供列表标记「已通过」。 */
+    public List<Long> solvedQuestionIds() {
+        Long userId = AuthContextHolder.currentUserId();
+        if (userId == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        return submissionMapper.findCorrectQuestionIds(userId);
+    }
+
+    /** 我的客观题作答记录：仅返回本人记录，按 id 倒序分页；correct 为 null 表示不筛对错。 */
+    public PageResult<ObjectiveSubmissionListVO> listSubmissions(
+            Integer correct, int page, int size) {
+        Long userId = AuthContextHolder.currentUserId();
+        if (userId == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        int offset = (safePage - 1) * safeSize;
+        List<ObjectiveSubmissionListVO> list =
+                submissionMapper.findPage(userId, correct, offset, safeSize);
+        long total = submissionMapper.count(userId, correct);
+        return new PageResult<>(list, total, safePage, safeSize);
     }
 
     private ObjectiveQuestion getQuestionOrThrow(Long id) {

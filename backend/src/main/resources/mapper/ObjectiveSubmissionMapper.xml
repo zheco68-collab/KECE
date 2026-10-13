@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.kece.objective.mapper.ObjectiveSubmissionMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO `objective_submission` (user_id, question_id, answer, correct, score)
+        VALUES (#{userId}, #{questionId}, #{answer}, #{correct}, #{score})
+    </insert>
+
+    <select id="findCorrectQuestionIds" resultType="long">
+        SELECT DISTINCT question_id FROM `objective_submission`
+        WHERE user_id = #{userId} AND correct = 1
+    </select>
+
+    <sql id="filters">
+        <where>
+            <if test="userId != null">s.user_id = #{userId}</if>
+            <if test="correct != null">AND s.correct = #{correct}</if>
+        </where>
+    </sql>
+
+    <select id="findPage" resultType="com.kece.objective.dto.ObjectiveSubmissionListVO">
+        SELECT s.id AS submissionId,
+               s.question_id AS questionId,
+               q.content AS questionContent,
+               q.type AS type,
+               s.answer AS answer,
+               s.correct AS correct,
+               q.answer AS correctAnswer,
+               s.score AS score,
+               q.score AS fullScore,
+               s.created_at AS createdAt
+        FROM `objective_submission` s
+        LEFT JOIN `objective_question` q ON q.id = s.question_id
+        <include refid="filters"/>
+        ORDER BY s.id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM `objective_submission` s
+        <include refid="filters"/>
+    </select>
+
+</mapper>
