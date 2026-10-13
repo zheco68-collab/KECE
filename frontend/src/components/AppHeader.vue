@@ -44,6 +44,12 @@ function logout() {
             {{ userStore.hasRole('ADMIN') ? '管理员' : '出题人' }}
           </span>
           <button class="btn btn-ghost btn-sm" @click="logout">退出</button>
+          <RouterLink
+            v-if="userStore.hasRole('ADMIN') || userStore.hasRole('TEACHER')"
+            to="/admin"
+            class="btn btn-primary btn-sm"
+            >后台管理</RouterLink
+          >
         </template>
         <RouterLink v-else to="/login" class="btn btn-primary btn-sm">登录</RouterLink>
       </div>

@@ -56,6 +56,23 @@ function validate(): boolean {
   return ok
 }
 
+// 被守卫拦下的页面会把原路径挂在 redirect 上。只接受站内绝对路径，
+// 挡掉 //evil.com 与 /\evil.com 两类协议相对写法（WHATWG URL 会把后者
+// 归一成 //evil.com），免得登录页变成开放重定向跳板。
+function resolveTarget(): string {
+  const raw = route.query.redirect
+  const target = Array.isArray(raw) ? raw[0] : raw
+  if (
+    typeof target === 'string' &&
+    target.startsWith('/') &&
+    !target.startsWith('//') &&
+    !target.startsWith('/\\')
+  ) {
+    return target
+  }
+  return '/'
+}
+
 async function submit() {
   if (loading.value || !validate()) return
   loading.value = true
@@ -69,7 +86,7 @@ async function submit() {
         })
       : await authApi.login({ username: form.identifier.trim(), password: form.password })
     userStore.setAuth(auth)
-    router.push('/')
+    router.push(resolveTarget())
   } catch (e) {
     submitError.value = e instanceof Error ? e.message : '请求失败，请稍后重试'
   } finally {

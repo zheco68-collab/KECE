@@ -13,6 +13,17 @@
         <result column="updated_at" property="updatedAt"/>
     </resultMap>
 
+    <!-- findPage 与 count 共用，保证总数与列表的过滤条件完全一致 -->
+    <sql id="pageWhere">
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND (username LIKE CONCAT('%', #{keyword}, '%') OR email LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            <if test="role != null and role != ''">AND FIND_IN_SET(#{role}, roles)</if>
+            <if test="status != null">AND status = #{status}</if>
+        </where>
+    </sql>
+
     <select id="findById" resultMap="BaseResultMap">
         SELECT * FROM `user` WHERE id = #{id}
     </select>
@@ -29,5 +40,29 @@
         INSERT INTO `user` (username, password_hash, email, roles, status)
         VALUES (#{username}, #{passwordHash}, #{email}, #{roles}, #{status})
     </insert>
+
+    <select id="findPage" resultMap="BaseResultMap">
+        SELECT * FROM `user`
+        <include refid="pageWhere"/>
+        ORDER BY id ASC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM `user`
+        <include refid="pageWhere"/>
+    </select>
+
+    <update id="updateRoles">
+        UPDATE `user` SET roles = #{roles}, updated_at = CURRENT_TIMESTAMP WHERE id = #{id}
+    </update>
+
+    <update id="updateStatus">
+        UPDATE `user` SET status = #{status}, updated_at = CURRENT_TIMESTAMP WHERE id = #{id}
+    </update>
+
+    <update id="updatePassword">
+        UPDATE `user` SET password_hash = #{passwordHash}, updated_at = CURRENT_TIMESTAMP WHERE id = #{id}
+    </update>
 
 </mapper>
