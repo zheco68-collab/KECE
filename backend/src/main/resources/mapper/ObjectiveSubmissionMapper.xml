@@ -2,10 +2,36 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.kece.objective.mapper.ObjectiveSubmissionMapper">
 
+    <resultMap id="BaseResultMap" type="com.kece.objective.entity.ObjectiveSubmission">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="question_id" property="questionId"/>
+        <result column="answer" property="answer"/>
+        <result column="correct" property="correct"/>
+        <result column="score" property="score"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO `objective_submission` (user_id, question_id, answer, correct, score)
         VALUES (#{userId}, #{questionId}, #{answer}, #{correct}, #{score})
     </insert>
+
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT * FROM `objective_submission` WHERE id = #{id}
+    </select>
+
+    <select id="findByQuestionId" resultMap="BaseResultMap">
+        SELECT id, user_id, question_id, answer, correct, score, created_at
+        FROM `objective_submission`
+        WHERE question_id = #{questionId}
+    </select>
+
+    <update id="updateCorrectAndScore">
+        UPDATE `objective_submission`
+           SET correct = #{correct}, score = #{score}
+         WHERE id = #{id}
+    </update>
 
     <select id="findCorrectQuestionIds" resultType="long">
         SELECT DISTINCT question_id FROM `objective_submission`
@@ -15,14 +41,18 @@
     <sql id="filters">
         <where>
             <if test="userId != null">s.user_id = #{userId}</if>
+            <if test="questionId != null">AND s.question_id = #{questionId}</if>
             <if test="correct != null">AND s.correct = #{correct}</if>
         </where>
     </sql>
 
     <select id="findPage" resultType="com.kece.objective.dto.ObjectiveSubmissionListVO">
         SELECT s.id AS submissionId,
+               s.user_id AS userId,
                s.question_id AS questionId,
                q.content AS questionContent,
+               q.content AS questionTitle,
+               u.username AS username,
                q.type AS type,
                s.answer AS answer,
                s.correct AS correct,
@@ -32,6 +62,7 @@
                s.created_at AS createdAt
         FROM `objective_submission` s
         LEFT JOIN `objective_question` q ON q.id = s.question_id
+        LEFT JOIN `user` u ON u.id = s.user_id
         <include refid="filters"/>
         ORDER BY s.id DESC
         LIMIT #{offset}, #{size}
@@ -40,6 +71,10 @@
     <select id="count" resultType="long">
         SELECT COUNT(*) FROM `objective_submission` s
         <include refid="filters"/>
+    </select>
+
+    <select id="existsByQuestionId" resultType="boolean">
+        SELECT EXISTS(SELECT 1 FROM `objective_submission` WHERE question_id = #{questionId})
     </select>
 
 </mapper>

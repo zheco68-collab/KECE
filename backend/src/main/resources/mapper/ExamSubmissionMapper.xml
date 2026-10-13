@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.kece.exam.mapper.ExamSubmissionMapper">
+
+    <resultMap id="BaseResultMap" type="com.kece.exam.entity.ExamSubmission">
+        <id column="id" property="id"/>
+        <result column="exam_id" property="examId"/>
+        <result column="user_id" property="userId"/>
+        <result column="exam_question_id" property="examQuestionId"/>
+        <result column="answer_content" property="answerContent"/>
+        <result column="language" property="language"/>
+        <result column="status" property="status"/>
+        <result column="submitted" property="submitted"/>
+        <result column="score" property="score"/>
+        <result column="result_json" property="resultJson"/>
+        <result column="submitted_at" property="submittedAt"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO `exam_submission`
+            (exam_id, user_id, exam_question_id, answer_content, language, status, submitted, score, result_json)
+        VALUES
+            (#{examId}, #{userId}, #{examQuestionId}, #{answerContent}, #{language}, #{status}, #{submitted}, #{score}, #{resultJson})
+    </insert>
+
+    <update id="updateAnswer">
+        UPDATE `exam_submission`
+           SET answer_content = #{answerContent},
+               language = #{language},
+               status = #{status},
+               submitted = 0,
+               score = NULL,
+               result_json = NULL
+         WHERE id = #{id}
+    </update>
+
+    <update id="updateResult">
+        UPDATE `exam_submission`
+           SET status = #{status}, score = #{score}, result_json = #{resultJson}, submitted = 1
+         WHERE id = #{id}
+    </update>
+
+    <update id="updateJudgeResult">
+        UPDATE `exam_submission`
+           SET status = #{status}, score = #{score}, result_json = #{resultJson}
+         WHERE id = #{id}
+    </update>
+
+    <update id="markSubmitted">
+        UPDATE `exam_submission`
+           SET submitted = 1
+         WHERE id = #{id}
+    </update>
+
+    <select id="findByUnique" resultMap="BaseResultMap">
+        SELECT * FROM `exam_submission`
+        WHERE exam_id = #{examId} AND user_id = #{userId} AND exam_question_id = #{examQuestionId}
+    </select>
+
+    <select id="findByExamAndUser" resultMap="BaseResultMap">
+        SELECT * FROM `exam_submission`
+        WHERE exam_id = #{examId} AND user_id = #{userId}
+        ORDER BY exam_question_id ASC
+    </select>
+
+    <select id="findByExam" resultMap="BaseResultMap">
+        SELECT * FROM `exam_submission`
+        WHERE exam_id = #{examId}
+        ORDER BY user_id ASC, exam_question_id ASC
+    </select>
+
+    <select id="countByExam" resultType="int">
+        SELECT COUNT(*) FROM `exam_submission` WHERE exam_id = #{examId}
+    </select>
+
+    <delete id="deleteByExam">
+        DELETE FROM `exam_submission` WHERE exam_id = #{examId}
+    </delete>
+
+</mapper>

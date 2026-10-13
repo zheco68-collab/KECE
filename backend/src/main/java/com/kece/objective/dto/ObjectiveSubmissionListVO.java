@@ -14,10 +14,15 @@ import lombok.NoArgsConstructor;
 public class ObjectiveSubmissionListVO {
 
     private Long submissionId;
+    private Long userId;
+    private String username;
     private Long questionId;
 
     /** 题干（Markdown 原文，前端按需截断展示）。 */
     private String questionContent;
+
+    /** 管理列表统一列名：与编程/数据库题列表对齐，值为题干原文。 */
+    private String questionTitle;
 
     private String type;
 

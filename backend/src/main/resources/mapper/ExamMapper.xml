@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.kece.exam.mapper.ExamMapper">
+
+    <resultMap id="BaseResultMap" type="com.kece.exam.entity.Exam">
+        <id column="id" property="id"/>
+        <result column="title" property="title"/>
+        <result column="description" property="description"/>
+        <result column="duration_minutes" property="durationMinutes"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="mode" property="mode"/>
+        <result column="status" property="status"/>
+        <result column="session_status" property="sessionStatus"/>
+        <result column="created_by" property="createdBy"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO `exam`
+            (title, description, duration_minutes, start_time, end_time, mode, status, session_status, created_by)
+        VALUES
+            (#{title}, #{description}, #{durationMinutes}, #{startTime}, #{endTime}, #{mode}, #{status}, #{sessionStatus}, #{createdBy})
+    </insert>
+
+    <update id="update">
+        UPDATE `exam`
+        <set>
+            <if test="title != null">title = #{title},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="durationMinutes != null">duration_minutes = #{durationMinutes},</if>
+            <if test="startTime != null">start_time = #{startTime},</if>
+            <if test="endTime != null">end_time = #{endTime},</if>
+            <if test="mode != null">mode = #{mode},</if>
+            <if test="status != null">status = #{status},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateSessionStatus">
+        UPDATE `exam` SET session_status = #{sessionStatus} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM `exam` WHERE id = #{id}
+    </delete>
+
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT * FROM `exam` WHERE id = #{id}
+    </select>
+
+    <select id="findPage" resultMap="BaseResultMap">
+        SELECT * FROM `exam`
+        <where>
+            <if test="keyword != null and keyword != ''">
+                title LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+            <if test="status != null">AND status = #{status}</if>
+            <if test="createdBy != null">AND created_by = #{createdBy}</if>
+        </where>
+        ORDER BY id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM `exam`
+        <where>
+            <if test="keyword != null and keyword != ''">
+                title LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+            <if test="status != null">AND status = #{status}</if>
+            <if test="createdBy != null">AND created_by = #{createdBy}</if>
+        </where>
+    </select>
+
+    <select id="countSubmissions" resultType="int">
+        SELECT COUNT(*) FROM `exam_submission` WHERE exam_id = #{examId}
+    </select>
+
+</mapper>

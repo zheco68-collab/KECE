@@ -13,6 +13,7 @@ import com.kece.database.dto.DbTestCaseVO;
 import com.kece.database.entity.DbQuestion;
 import com.kece.database.entity.DbTestCase;
 import com.kece.database.mapper.DbQuestionMapper;
+import com.kece.database.mapper.DbSubmissionMapper;
 import com.kece.database.mapper.DbTestCaseMapper;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +28,7 @@ public class DbQuestionService {
 
     private final DbQuestionMapper questionMapper;
     private final DbTestCaseMapper testCaseMapper;
+    private final DbSubmissionMapper submissionMapper;
 
     public PageResult<DbQuestionVO> list(
             String type, String keyword, int page, int size, boolean all) {
@@ -97,6 +99,9 @@ public class DbQuestionService {
     public void delete(Long id) {
         DbQuestion question = getQuestionOrThrow(id);
         checkOwnerOrAdmin(question);
+        if (submissionMapper.existsByQuestionId(id)) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "该题目已有提交记录，不能删除");
+        }
         testCaseMapper.deleteByQuestionId(id);
         questionMapper.deleteById(id);
     }

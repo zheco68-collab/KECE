@@ -14,6 +14,8 @@ import lombok.NoArgsConstructor;
 public class SubmissionListVO {
 
     private Long submissionId;
+    private Long userId;
+    private String username;
     private Long questionId;
     private String questionTitle;
     private String language;

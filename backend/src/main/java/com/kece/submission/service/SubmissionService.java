@@ -1,7 +1,9 @@
 package com.kece.submission.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kece.admin.dto.RejudgeResultVO;
 import com.kece.common.exception.BusinessException;
 import com.kece.common.response.PageResult;
 import com.kece.common.response.ResultCode;
@@ -23,8 +25,10 @@ import com.kece.submission.mapper.SubmissionMapper;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -115,8 +119,28 @@ public class SubmissionService {
         String statusFilter =
                 (status == null || status.isBlank()) ? null : status.trim().toUpperCase();
         List<SubmissionListVO> list =
-                submissionMapper.findPage(userId, statusFilter, offset, safeSize);
-        long total = submissionMapper.count(userId, statusFilter);
+                submissionMapper.findPage(userId, null, statusFilter, null, offset, safeSize);
+        long total = submissionMapper.count(userId, null, statusFilter, null);
+        return new PageResult<>(list, total, safePage, safeSize);
+    }
+
+    /** 后台提交列表：ADMIN 可跨用户/跨题查询；TEACHER 仅限自己所出题目的提交（仍可筛任意用户，归属约束在 SQL createdBy 条件）。 */
+    public PageResult<SubmissionListVO> listAdmin(
+            String status, Long userId, Long questionId, int page, int size) {
+        AuthUser user = AuthContextHolder.get();
+        if (user == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        int offset = (safePage - 1) * safeSize;
+        String statusFilter =
+                (status == null || status.isBlank()) ? null : status.trim().toUpperCase();
+        Long targetCreatedBy = user.hasRole(Role.ADMIN) ? null : user.getId();
+        List<SubmissionListVO> list =
+                submissionMapper.findPage(
+                        userId, questionId, statusFilter, targetCreatedBy, offset, safeSize);
+        long total = submissionMapper.count(userId, questionId, statusFilter, targetCreatedBy);
         return new PageResult<>(list, total, safePage, safeSize);
     }
 
@@ -135,38 +159,142 @@ public class SubmissionService {
         if (user == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
+        Submission submission = null;
         String ownerId = redis.opsForValue().get(ownerKey(id));
         if (ownerId != null) {
-            checkOwner(user, ownerId);
+            // 快路径：提交人 + 题目归属双重判定（出题人可看自己所出题目的提交）
+            submission = submissionMapper.findById(id);
+            if (submission == null || !canAccessSubmission(user, submission)) {
+                throw new BusinessException(ResultCode.FORBIDDEN);
+            }
             String cached = redis.opsForValue().get(statusKey(id));
             if (cached != null) {
-                return sanitize(readJson(cached, SubmissionVO.class), user);
+                return sanitize(
+                        readJson(cached, SubmissionVO.class), user, submission.getQuestionId());
             }
         }
+        if (submission == null) {
+            submission = submissionMapper.findById(id);
+            if (submission == null) {
+                throw new BusinessException(ResultCode.NOT_FOUND, "提交记录不存在");
+            }
+        }
+        if (!canAccessSubmission(user, submission)) {
+            throw new BusinessException(ResultCode.FORBIDDEN);
+        }
+        return sanitize(toVOFromEntity(submission), user, submission.getQuestionId());
+    }
+
+    /** 样例豁免统一（决策 27）：样例用例的期望/实际输出始终可见（本就随题面公开）；非样例仅管理员或该题出题人可见， 其余答题者置空，避免由比对结果反推隐藏测试点的数据与答案。 */
+    private SubmissionVO sanitize(SubmissionVO vo, AuthUser user, Long questionId) {
+        if (vo == null || vo.getResult() == null) {
+            return vo;
+        }
+        var report = vo.getResult().getTestCasesReport();
+        if (report == null || report.isEmpty()) {
+            return vo;
+        }
+        boolean privileged = isPrivilegedForQuestion(user, questionId);
+        Set<Long> sampleCaseIds = findSampleCaseIds(questionId);
+        report.forEach(
+                c -> {
+                    if (sampleCaseIds.contains(c.getCaseId()) || privileged) {
+                        return;
+                    }
+                    c.setExpectedOutput(null);
+                    c.setActualOutput(null);
+                });
+        return vo;
+    }
+
+    private Set<Long> findSampleCaseIds(Long questionId) {
+        List<TestCase> samples = testCaseMapper.findSamplesByQuestionId(questionId);
+        if (samples == null || samples.isEmpty()) {
+            return Set.of();
+        }
+        Set<Long> ids = new HashSet<>();
+        for (TestCase tc : samples) {
+            ids.add(tc.getId());
+        }
+        return ids;
+    }
+
+    /** 管理员或该题出题人可见隐藏用例。 */
+    private boolean isPrivilegedForQuestion(AuthUser user, Long questionId) {
+        if (user.hasRole(Role.ADMIN)) {
+            return true;
+        }
+        Question question = questionId == null ? null : questionMapper.findById(questionId);
+        return question != null && question.getCreatedBy().equals(user.getId());
+    }
+
+    /**
+     * 重判单条提交：仅管理员或该题出题人可操作；评测中的提交拒绝；使用题目当前数据重新入队。
+     *
+     * <p>三步缺一不可：reset DB（专用 SQL 置回 NULL）→ 清/刷 Redis 状态与 owner（成对）→ 重新压队列任务。
+     */
+    @Transactional
+    public RejudgeResultVO rejudge(Long id) {
         Submission submission = submissionMapper.findById(id);
         if (submission == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "提交记录不存在");
         }
-        if (!canView(user, submission)) {
-            throw new BusinessException(ResultCode.FORBIDDEN);
+        checkRejudgePermission(submission);
+        if (isJudging(submission.getStatus())) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "该提交正在评测中，请稍后再试");
         }
-        return sanitize(toVOFromEntity(submission), user);
+        Question question = questionMapper.findById(submission.getQuestionId());
+        if (question == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "题目不存在或已删除");
+        }
+        List<TestCase> testCases = testCaseMapper.findByQuestionId(submission.getQuestionId());
+        Map<String, String> code = parseCodeContent(submission.getCodeContent());
+
+        submissionMapper.resetResult(id);
+        SubmissionVO pending = buildPendingVO(id, testCases.size());
+        redis.opsForValue()
+                .set(statusKey(id), writeJson(pending), Duration.ofSeconds(STATUS_TTL_SECONDS));
+        redis.opsForValue()
+                .set(
+                        ownerKey(id),
+                        String.valueOf(submission.getUserId()),
+                        Duration.ofSeconds(STATUS_TTL_SECONDS));
+        redis.opsForList()
+                .rightPush(QUEUE_KEY, writeJson(buildTask(submission, question, testCases, code)));
+        return RejudgeResultVO.builder()
+                .submissionId(id)
+                .status(SubmissionStatus.PENDING.name())
+                .build();
     }
 
-    /** 对非管理员答题者隐藏逐用例的期望/实际输出（隐藏用例内容），仅保留各节点状态。 */
-    private SubmissionVO sanitize(SubmissionVO vo, AuthUser user) {
-        if (vo == null || user.hasRole(Role.ADMIN) || vo.getResult() == null) {
-            return vo;
+    private void checkRejudgePermission(Submission submission) {
+        AuthUser user = AuthContextHolder.get();
+        if (user == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
-        var report = vo.getResult().getTestCasesReport();
-        if (report != null) {
-            report.forEach(
-                    c -> {
-                        c.setExpectedOutput(null);
-                        c.setActualOutput(null);
-                    });
+        if (user.hasRole(Role.ADMIN)) {
+            return;
         }
-        return vo;
+        Question question = questionMapper.findById(submission.getQuestionId());
+        if (question == null || !question.getCreatedBy().equals(user.getId())) {
+            throw new BusinessException(ResultCode.FORBIDDEN);
+        }
+    }
+
+    /** 评测中（非终态中的进行态）不允许重判。 */
+    private boolean isJudging(String status) {
+        return "PENDING".equals(status) || "COMPILING".equals(status) || "JUDGING".equals(status);
+    }
+
+    private Map<String, String> parseCodeContent(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<Map<String, String>>() {});
+        } catch (JsonProcessingException e) {
+            return Map.of();
+        }
     }
 
     /** 定时回写：将判题机写入 Redis 的终态结果落库 MySQL（幂等）。 */
@@ -260,20 +388,16 @@ public class SubmissionService {
                 .build();
     }
 
-    private void checkOwner(AuthUser user, String ownerId) {
-        if (user.hasRole(Role.ADMIN)) {
-            return;
-        }
-        if (!ownerId.equals(String.valueOf(user.getId()))) {
-            throw new BusinessException(ResultCode.FORBIDDEN);
-        }
-    }
-
-    private boolean canView(AuthUser user, Submission submission) {
+    /** 提交可见性：管理员、提交人本人、该题出题人均可查看。 */
+    private boolean canAccessSubmission(AuthUser user, Submission submission) {
         if (user.hasRole(Role.ADMIN)) {
             return true;
         }
-        return submission.getUserId().equals(user.getId());
+        if (submission.getUserId().equals(user.getId())) {
+            return true;
+        }
+        Question question = questionMapper.findById(submission.getQuestionId());
+        return question != null && question.getCreatedBy().equals(user.getId());
     }
 
     private boolean supportsLanguage(Question question, String language) {

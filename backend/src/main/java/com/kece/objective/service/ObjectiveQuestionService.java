@@ -2,6 +2,7 @@ package com.kece.objective.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kece.admin.dto.RejudgeResultVO;
 import com.kece.common.exception.BusinessException;
 import com.kece.common.response.PageResult;
 import com.kece.common.response.ResultCode;
@@ -97,7 +98,49 @@ public class ObjectiveQuestionService {
     public void delete(Long id) {
         ObjectiveQuestion question = getQuestionOrThrow(id);
         checkOwnerOrAdmin(question);
+        if (submissionMapper.existsByQuestionId(id)) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "该题目已有提交记录，不能删除");
+        }
         mapper.deleteById(id);
+    }
+
+    /** 单条客观题作答重判：仅管理员或该题出题人；用题目当前答案与分值重跑判分，同时覆盖 correct 与 score （多选漏选是半分，只改一个会错）。 */
+    @Transactional
+    public RejudgeResultVO rejudge(Long submissionId) {
+        ObjectiveSubmission submission = submissionMapper.findById(submissionId);
+        if (submission == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "作答记录不存在");
+        }
+        ObjectiveQuestion question = getQuestionOrThrow(submission.getQuestionId());
+        checkOwnerOrAdmin(question);
+        AnswerResultVO result = grader.grade(question, submission.getAnswer());
+        submissionMapper.updateCorrectAndScore(
+                submissionId, result.isCorrect() ? 1 : 0, result.getScore());
+        return RejudgeResultVO.builder()
+                .submissionId(submissionId)
+                .status(result.isCorrect() ? "ACCEPTED" : "WRONG_ANSWER")
+                .build();
+    }
+
+    /**
+     * 按题批量重判：重跑该题全部作答记录（依赖 V5 新增的 idx_question_id）。题目改答案/分值后列表的 correctAnswer/fullScore 是活值，存量
+     * correct/score 是旧快照，此操作让两者重新一致。
+     */
+    @Transactional
+    public RejudgeResultVO rejudgeByQuestion(Long questionId) {
+        ObjectiveQuestion question = getQuestionOrThrow(questionId);
+        checkOwnerOrAdmin(question);
+        List<ObjectiveSubmission> rows = submissionMapper.findByQuestionId(questionId);
+        for (ObjectiveSubmission row : rows) {
+            AnswerResultVO result = grader.grade(question, row.getAnswer());
+            submissionMapper.updateCorrectAndScore(
+                    row.getId(), result.isCorrect() ? 1 : 0, result.getScore());
+        }
+        return RejudgeResultVO.builder()
+                .questionId(questionId)
+                .rejudged(rows.size())
+                .status("DONE")
+                .build();
     }
 
     /** 作答并即时判分，同时留痕一条作答记录（可重复作答，逐次记录）。 */
@@ -139,8 +182,25 @@ public class ObjectiveQuestionService {
         int safeSize = Math.min(Math.max(size, 1), 100);
         int offset = (safePage - 1) * safeSize;
         List<ObjectiveSubmissionListVO> list =
-                submissionMapper.findPage(userId, correct, offset, safeSize);
-        long total = submissionMapper.count(userId, correct);
+                submissionMapper.findPage(userId, null, correct, offset, safeSize);
+        long total = submissionMapper.count(userId, null, correct);
+        return new PageResult<>(list, total, safePage, safeSize);
+    }
+
+    /** 后台客观题作答列表：ADMIN 可跨用户/跨题查询；其余角色一律锁死为本人记录（与代码/数据库题按题目归属的约束方式不同）。 */
+    public PageResult<ObjectiveSubmissionListVO> listSubmissionsAdmin(
+            Integer correct, Long userId, Long questionId, int page, int size) {
+        AuthUser user = AuthContextHolder.get();
+        if (user == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        Long targetUserId = user.hasRole(Role.ADMIN) ? userId : user.getId();
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        int offset = (safePage - 1) * safeSize;
+        List<ObjectiveSubmissionListVO> list =
+                submissionMapper.findPage(targetUserId, questionId, correct, offset, safeSize);
+        long total = submissionMapper.count(targetUserId, questionId, correct);
         return new PageResult<>(list, total, safePage, safeSize);
     }
 

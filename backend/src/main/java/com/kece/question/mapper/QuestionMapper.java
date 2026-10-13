@@ -17,6 +17,9 @@ public interface QuestionMapper {
 
     Question findById(Long id);
 
+    /** 按标题精确查重（种子播种幂等用）。 */
+    Question findByTitle(@Param("title") String title);
+
     List<Question> findPage(
             @Param("keyword") String keyword,
             @Param("difficulty") String difficulty,

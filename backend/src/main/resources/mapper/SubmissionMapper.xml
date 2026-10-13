@@ -32,8 +32,10 @@
 
     <select id="findPage" resultType="com.kece.submission.dto.SubmissionListVO">
         SELECT s.id AS submissionId,
+               s.user_id AS userId,
                s.question_id AS questionId,
                q.title AS questionTitle,
+               u.username AS username,
                s.language AS language,
                s.code_content AS codeContent,
                s.status AS status,
@@ -43,9 +45,12 @@
                s.created_at AS createdAt
         FROM `submission` s
         LEFT JOIN `question` q ON q.id = s.question_id
+        LEFT JOIN `user` u ON u.id = s.user_id
         <where>
             <if test="userId != null">s.user_id = #{userId}</if>
+            <if test="questionId != null">AND s.question_id = #{questionId}</if>
             <if test="status != null and status != ''">AND s.status = #{status}</if>
+            <if test="createdBy != null">AND q.created_by = #{createdBy}</if>
         </where>
         ORDER BY s.id DESC
         LIMIT #{offset}, #{size}
@@ -53,9 +58,12 @@
 
     <select id="count" resultType="long">
         SELECT COUNT(*) FROM `submission` s
+        LEFT JOIN `question` q ON q.id = s.question_id
         <where>
             <if test="userId != null">s.user_id = #{userId}</if>
+            <if test="questionId != null">AND s.question_id = #{questionId}</if>
             <if test="status != null and status != ''">AND s.status = #{status}</if>
+            <if test="createdBy != null">AND q.created_by = #{createdBy}</if>
         </where>
     </select>
 
@@ -63,6 +71,27 @@
         SELECT DISTINCT question_id FROM `submission`
         WHERE user_id = #{userId} AND status = 'ACCEPTED'
     </select>
+
+    <select id="existsByQuestionId" resultType="boolean">
+        SELECT EXISTS(SELECT 1 FROM `submission` WHERE question_id = #{questionId})
+    </select>
+
+    <select id="findLatestByContest" resultMap="BaseResultMap">
+        SELECT * FROM `submission`
+        WHERE contest_id = #{contestId} AND user_id = #{userId} AND question_id = #{questionId}
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <select id="findByContest" resultMap="BaseResultMap">
+        SELECT * FROM `submission`
+        WHERE contest_id = #{contestId}
+        ORDER BY id ASC
+    </select>
+
+    <delete id="deleteByContest">
+        DELETE FROM `submission` WHERE contest_id = #{contestId}
+    </delete>
 
     <update id="updateResult">
         UPDATE `submission`
@@ -75,6 +104,14 @@
             <if test="resultJson != null">result_json = #{resultJson},</if>
         </set>
         WHERE id = #{id}
+    </update>
+
+    <!-- 重判专用：MyBatis 的 updateResult 在参数为 null 时整段跳过 <if>，置不回 NULL，必须独立重置。 -->
+    <update id="resetResult">
+        UPDATE `submission`
+           SET status = 'PENDING', score = NULL, time_used_ms = NULL,
+               memory_used_kb = NULL, error_log = NULL, result_json = NULL
+         WHERE id = #{id}
     </update>
 
 </mapper>

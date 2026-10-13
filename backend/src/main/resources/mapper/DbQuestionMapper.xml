@@ -27,6 +27,10 @@
         </where>
     </sql>
 
+    <select id="findByTitle" resultMap="BaseResultMap">
+        SELECT * FROM `db_question` WHERE title = #{title} LIMIT 1
+    </select>
+
     <select id="findPage" resultMap="BaseResultMap">
         SELECT * FROM `db_question`
         <include refid="filters"/>

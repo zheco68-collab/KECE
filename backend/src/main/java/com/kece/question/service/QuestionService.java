@@ -14,6 +14,7 @@ import com.kece.question.entity.Question;
 import com.kece.question.entity.TestCase;
 import com.kece.question.mapper.QuestionMapper;
 import com.kece.question.mapper.TestCaseMapper;
+import com.kece.submission.mapper.SubmissionMapper;
 import java.util.Arrays;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ public class QuestionService {
 
     private final QuestionMapper questionMapper;
     private final TestCaseMapper testCaseMapper;
+    private final SubmissionMapper submissionMapper;
 
     public PageResult<QuestionVO> list(
             String keyword, String difficulty, int page, int size, boolean all) {
@@ -90,6 +92,9 @@ public class QuestionService {
     public void delete(Long id) {
         Question question = getQuestionOrThrow(id);
         checkOwnerOrAdmin(question);
+        if (submissionMapper.existsByQuestionId(id)) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "该题目已有提交记录，不能删除");
+        }
         testCaseMapper.deleteByQuestionId(id);
         questionMapper.deleteById(id);
     }

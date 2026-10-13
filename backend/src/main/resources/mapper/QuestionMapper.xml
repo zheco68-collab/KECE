@@ -41,6 +41,10 @@
         SELECT * FROM `question` WHERE id = #{id}
     </select>
 
+    <select id="findByTitle" resultMap="BaseResultMap">
+        SELECT * FROM `question` WHERE title = #{title} LIMIT 1
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO `question`
             (title, description, difficulty, time_limit, memory_limit, languages, created_by, status)

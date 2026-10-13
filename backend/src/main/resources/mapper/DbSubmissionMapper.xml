@@ -17,8 +17,8 @@
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO `db_submission` (user_id, question_id, dialect, sql_content, status)
-        VALUES (#{userId}, #{questionId}, #{dialect}, #{sqlContent}, #{status})
+        INSERT INTO `db_submission` (user_id, question_id, contest_id, dialect, sql_content, status)
+        VALUES (#{userId}, #{questionId}, #{contestId}, #{dialect}, #{sqlContent}, #{status})
     </insert>
 
     <select id="findById" resultMap="BaseResultMap">
@@ -27,8 +27,10 @@
 
     <select id="findPage" resultType="com.kece.database.dto.DbSubmissionListVO">
         SELECT s.id AS submissionId,
+               s.user_id AS userId,
                s.question_id AS questionId,
                q.title AS questionTitle,
+               u.username AS username,
                s.status AS status,
                s.score AS score,
                s.time_used_ms AS timeUsedMs,
@@ -36,9 +38,12 @@
                s.created_at AS createdAt
         FROM `db_submission` s
         LEFT JOIN `db_question` q ON q.id = s.question_id
+        LEFT JOIN `user` u ON u.id = s.user_id
         <where>
             <if test="userId != null">s.user_id = #{userId}</if>
+            <if test="questionId != null">AND s.question_id = #{questionId}</if>
             <if test="status != null and status != ''">AND s.status = #{status}</if>
+            <if test="createdBy != null">AND q.created_by = #{createdBy}</if>
         </where>
         ORDER BY s.id DESC
         LIMIT #{offset}, #{size}
@@ -46,9 +51,12 @@
 
     <select id="count" resultType="long">
         SELECT COUNT(*) FROM `db_submission` s
+        LEFT JOIN `db_question` q ON q.id = s.question_id
         <where>
             <if test="userId != null">s.user_id = #{userId}</if>
+            <if test="questionId != null">AND s.question_id = #{questionId}</if>
             <if test="status != null and status != ''">AND s.status = #{status}</if>
+            <if test="createdBy != null">AND q.created_by = #{createdBy}</if>
         </where>
     </select>
 
@@ -56,6 +64,27 @@
         SELECT DISTINCT question_id FROM `db_submission`
         WHERE user_id = #{userId} AND status = 'ACCEPTED'
     </select>
+
+    <select id="existsByQuestionId" resultType="boolean">
+        SELECT EXISTS(SELECT 1 FROM `db_submission` WHERE question_id = #{questionId})
+    </select>
+
+    <select id="findLatestByContest" resultMap="BaseResultMap">
+        SELECT * FROM `db_submission`
+        WHERE contest_id = #{contestId} AND user_id = #{userId} AND question_id = #{questionId}
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <select id="findByContest" resultMap="BaseResultMap">
+        SELECT * FROM `db_submission`
+        WHERE contest_id = #{contestId}
+        ORDER BY id ASC
+    </select>
+
+    <delete id="deleteByContest">
+        DELETE FROM `db_submission` WHERE contest_id = #{contestId}
+    </delete>
 
     <update id="updateResult">
         UPDATE `db_submission`
@@ -66,6 +95,13 @@
             <if test="resultJson != null">result_json = #{resultJson},</if>
         </set>
         WHERE id = #{id}
+    </update>
+
+    <!-- 重判专用：状态回 PENDING 并清空全部结果字段（updateResult 的 <if> 置不回 NULL）。 -->
+    <update id="resetResult">
+        UPDATE `db_submission`
+           SET status = 'PENDING', score = NULL, time_used_ms = NULL, result_json = NULL
+         WHERE id = #{id}
     </update>
 
 </mapper>
