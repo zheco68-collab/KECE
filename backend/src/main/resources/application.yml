@@ -39,6 +39,19 @@ kece:
     secret: ${JWT_SECRET:kece-default-jwt-secret-key-please-change-in-production-min-32-chars}
     expiration: ${JWT_EXPIRATION:86400000}
     refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+  # 演示数据开关：默认关（生产环境不播种默认账号与示例数据，防默认口令风险）；
+  # 仅 dev profile 开启，本地开发启动即有演示题目/作答可验收。
+  demo-data:
+    enabled: false
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+kece:
+  demo-data:
+    enabled: true
 
 springdoc:
   api-docs:
