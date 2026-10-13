@@ -3,8 +3,14 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { objectiveApi } from '@/api/objective'
 import { renderMarkdown } from '@/utils/markdown'
+import { STATUS_ABBR, statusTone } from '@/utils/submission'
 import { useUserStore } from '@/stores/user'
-import type { AnswerResult, ObjectiveQuestion, ObjectiveType } from '@/types'
+import type {
+  AnswerResult,
+  ObjectiveQuestion,
+  ObjectiveType,
+  SubmissionStatus,
+} from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,6 +34,11 @@ const typeLabels: Record<ObjectiveType, string> = {
 }
 
 const contentHtml = computed(() => renderMarkdown(question.value?.content ?? ''))
+
+/** 客观题只判一次、只有一个「测试点」，用 AC/WA 映射到统一的节点方块样式。 */
+const resultStatus = computed<SubmissionStatus>(() =>
+  result.value?.correct ? 'ACCEPTED' : 'WRONG_ANSWER',
+)
 
 function optionLetter(index: number): string {
   return String.fromCharCode(65 + index)
@@ -67,6 +78,7 @@ async function submit() {
   submitting.value = true
   submitError.value = ''
   try {
+    // 后端判分并落库，答对后列表页会显示绿色对勾。
     result.value = await objectiveApi.submit(id.value, answer)
   } catch (e) {
     submitError.value = e instanceof Error ? e.message : '提交失败'
@@ -154,10 +166,16 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div v-if="result" class="result card" :class="result.correct ? 'result-ok' : 'result-wrong'">
-        <div class="result-head">{{ result.correct ? '回答正确' : '回答错误' }}</div>
-        <div class="result-score">得分 {{ result.score }} / {{ result.fullScore }}</div>
-        <div class="result-answer">正确答案：{{ result.correctAnswer }}</div>
+      <!-- 判分结果：客观题只有一个「测试点」，沿用算法/数据库 OJ 的结果方块 -->
+      <div v-if="result" class="result">
+        <div class="node-statuses">
+          <span class="node-status" :class="statusTone(resultStatus)">
+            <span class="node-no">#1</span>
+            <span class="node-abbr">{{ STATUS_ABBR[resultStatus] ?? resultStatus }}</span>
+            <span class="node-meta">{{ result.score }} / {{ result.fullScore }} 分</span>
+          </span>
+        </div>
+        <p class="result-answer">正确答案：{{ result.correctAnswer }}</p>
       </div>
     </template>
   </div>
@@ -213,7 +231,7 @@ onMounted(async () => {
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--bg);
   border: 1px solid var(--line);
   font-size: 13px;
@@ -240,33 +258,71 @@ onMounted(async () => {
 }
 .result {
   margin-top: 24px;
-  padding: 20px 24px;
-}
-.result-head {
-  font-size: 17px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-.result-score {
-  color: var(--ink-secondary);
-  margin-bottom: 4px;
 }
 .result-answer {
+  margin: 14px 0 0;
   color: var(--ink-tertiary);
   font-size: 14px;
 }
-.result-ok {
-  border-color: #bfe3c6;
-  background: var(--success-bg);
+
+/* 测试点方块：尺寸/配色/字体与数据库 OJ 的结果面板保持一致 */
+.node-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.result-ok .result-head {
-  color: var(--success);
+.node-status {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  color: #fff;
 }
-.result-wrong {
-  border-color: #f0c4c6;
-  background: var(--danger-bg);
+.node-no {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.85;
+  line-height: 1;
 }
-.result-wrong .result-head {
-  color: var(--danger);
+.node-abbr {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+.node-meta {
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.9;
+  line-height: 1.3;
+}
+.node-status.ac {
+  background: var(--success);
+}
+.node-status.wa {
+  background: var(--danger);
+}
+.node-status.tle {
+  background: #000;
+}
+.node-status.mle {
+  background: #f57c00;
+}
+.node-status.re {
+  background: #9c27b0;
+}
+.node-status.ce,
+.node-status.se {
+  background: #607d8b;
+}
+.node-status.run {
+  background: #9e9e9e;
 }
 </style>

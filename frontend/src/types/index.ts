@@ -160,3 +160,18 @@ export interface SubmissionRecord {
   memoryUsedKb: number | null
   createdAt: string
 }
+
+/** 客观题作答记录。客观题只有一个「测试点」，对错即 AC/WA。 */
+export interface ObjectiveSubmissionRecord {
+  submissionId: number
+  questionId: number
+  questionContent: string
+  type: ObjectiveType
+  answer: string
+  /** 1 答对 / 0 答错 */
+  correct: number
+  correctAnswer: string
+  score: number | null
+  fullScore: number | null
+  createdAt: string
+}

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { objectiveApi } from '@/api/objective'
+import { useUserStore } from '@/stores/user'
 import type { ObjectiveQuestion, ObjectiveType } from '@/types'
 
 const keyword = ref('')
@@ -13,6 +14,9 @@ const list = ref<ObjectiveQuestion[]>([])
 const total = ref(0)
 const loading = ref(false)
 const error = ref('')
+
+const userStore = useUserStore()
+const solved = ref<Set<number>>(new Set())
 
 const typeLabels: Record<ObjectiveType, string> = {
   SINGLE: '单选',
@@ -47,12 +51,25 @@ function changePage(p: number) {
   load()
 }
 
+async function loadSolved() {
+  if (!userStore.isLoggedIn) return
+  try {
+    const ids = await objectiveApi.solved()
+    solved.value = new Set(ids)
+  } catch {
+    /* 未登录或加载失败时忽略，仅不显示已答对标记 */
+  }
+}
+
 watch([keyword, type], () => {
   page.value = 1
   load()
 })
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadSolved()
+})
 </script>
 
 <template>
@@ -91,6 +108,7 @@ onMounted(load)
         <span class="badge" :class="`type-${q.type.toLowerCase()}`">{{ typeLabels[q.type] }}</span>
         <p class="obj-content">{{ q.content }}</p>
         <span class="obj-score">{{ q.score }} 分</span>
+        <span v-if="solved.has(q.id)" class="solved-mark" title="已通过">✓</span>
       </RouterLink>
     </div>
 
@@ -178,6 +196,13 @@ onMounted(load)
 .obj-score {
   color: var(--ink-tertiary);
   font-size: 13px;
+  flex-shrink: 0;
+}
+.solved-mark {
+  color: var(--success);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
   flex-shrink: 0;
 }
 .pagination {
