@@ -376,7 +376,7 @@ onBeforeUnmount(() => {
 .status-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--ink-tertiary);
 }
 .result-head.ok .status-dot {
@@ -431,7 +431,7 @@ onBeforeUnmount(() => {
   padding: 14px;
   background: var(--danger-bg);
   color: var(--danger);
-  border-radius: 10px;
+  border-radius: 0;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 13px;
   white-space: pre-wrap;

@@ -88,7 +88,7 @@ function start() {
   position: absolute;
   width: 130px;
   height: 130px;
-  border-radius: 14px;
+  border-radius: 0;
   border: 1px solid rgba(255, 255, 255, 0.7);
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18));
   box-shadow:

@@ -10,8 +10,9 @@
   --danger-bg: #fdebec;
   --success: #2f9e44;
   --success-bg: #ebfbee;
-  --radius: 14px;
-  --pill: 999px;
+  /* 全站直角风格：圆角一律为 0，需要改回圆角只改这两个值。 */
+  --radius: 0;
+  --pill: 0;
   --font: 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI',
     Roboto, 'Helvetica Neue', Arial, sans-serif;
   --shadow-sm: 0 1px 2px rgba(17, 17, 17, 0.04);
@@ -211,7 +212,7 @@ button {
   height: 44px;
   padding: 0 14px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 0;
   background: var(--surface);
   font-family: inherit;
   font-size: 15px;
@@ -238,7 +239,7 @@ button {
 .submit-error {
   background: var(--danger-bg);
   color: var(--danger);
-  border-radius: 10px;
+  border-radius: 0;
   padding: 10px 14px;
   font-size: 13px;
 }
@@ -305,7 +306,7 @@ button {
 .prose code {
   background: var(--bg);
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 13px;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 }
@@ -313,7 +314,7 @@ button {
   background: var(--button);
   color: #f5f5f5;
   padding: 16px;
-  border-radius: 10px;
+  border-radius: 0;
   overflow-x: auto;
   line-height: 1.5;
 }
@@ -337,4 +338,16 @@ button {
 .prose td {
   border: 1px solid var(--line);
   padding: 8px 12px;
+}
+
+/* Monaco 是第三方组件，自带样式里散落了 60 多处圆角（滚动条、查找框、补全菜单、
+   悬浮提示、缩略图、右键菜单…），既有写死的像素值也有它自己的 --vscode-cornerRadius
+   系列变量，逐个覆盖不现实，直接在编辑器作用域内统一压平。
+   必须用 !important：Monaco 的样式是运行时注入的，且选择器特异性（如
+   `.monaco-editor .scrollbar .slider`）高于 `.monaco-editor *`。 */
+.monaco-editor,
+.monaco-editor *,
+.monaco-editor *::before,
+.monaco-editor *::after {
+  border-radius: 0 !important;
 }

@@ -420,7 +420,7 @@ onBeforeUnmount(stopPolling)
 .sql.plain {
   padding: 12px 14px;
   background: var(--bg);
-  border-radius: 10px;
+  border-radius: 0;
   font-size: 12px;
 }
 .error-text {
@@ -459,7 +459,7 @@ onBeforeUnmount(stopPolling)
 .status-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--ink-tertiary);
 }
 .result-head.ok .status-dot {
@@ -622,7 +622,7 @@ onBeforeUnmount(stopPolling)
 .table-wrap {
   overflow-x: auto;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 0;
 }
 .rs-table {
   width: 100%;

@@ -26,7 +26,7 @@ withDefaults(
   justify-content: center;
   flex-shrink: 0;
   font-weight: 700;
-  border-radius: 8px;
+  border-radius: 0;
   line-height: 1;
   user-select: none;
 }
