@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
 import { adminApi, type AdminUser } from '@/api/admin'
 import { ApiError } from '@/api/request'
+import AdminNav from '@/components/AdminNav.vue'
 import DataTable from '@/components/DataTable.vue'
 import FormField from '@/components/FormField.vue'
 import Pagination from '@/components/Pagination.vue'
@@ -220,8 +220,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="admin container">
-    <RouterLink class="back" to="/admin">← 返回后台首页</RouterLink>
     <h1 class="page-title">用户管理</h1>
+    <AdminNav />
 
     <div class="filter-bar card">
       <input v-model="keyword" class="input keyword-input" type="search" placeholder="用户名 / 邮箱" />
