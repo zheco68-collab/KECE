@@ -1,181 +1,250 @@
-# KECE — 综合编程与技能评测平台
+# KECE — 综合编程与全真技术技能评测平台
 
-一站式技术能力评估平台，整合算法 OJ、数据库 OJ、前端 AI 智能评测与标准客观题，服务于企业招聘笔试、高校教学与技术社区刷题场景。
+[![Vue 3](https://img.shields.io/badge/Frontend-Vue%203%20%7C%20TypeScript%20%7C%20Vite-42b883?style=flat-square)](https://vuejs.org/)
+[![Spring Boot](https://img.shields.io/badge/Backend-Spring%20Boot%203%20%7C%20Java%2017-6db33f?style=flat-square)](https://spring.io/projects/spring-boot)
+[![Go Judger](https://img.shields.io/badge/Judger-Go%20%7C%20Docker%20Sandbox-00add8?style=flat-square)](https://golang.org/)
+[![Database](https://img.shields.io/badge/Database-MySQL%208%20%7C%20Redis%207-00758f?style=flat-square)](https://www.mysql.com/)
 
-## 产品特性
+> **全真技术工程机试与在线评测平台**，集 **算法 OJ**、**数据库 SQL OJ**、**客观题自动评测** 与 **全流程组卷考试/竞赛系统** 于一体。服务于企业技术招聘笔试、高校实验教学及专业刷题竞技场景。
 
-- 算法 OJ：支持 C/C++、Java、Python、Go、Rust 等多语言，完整判题状态机（AC/WA/TLE/MLE/RE/CE）
-- 数据库 OJ：MySQL 8.0 方言，SELECT 与 DML 两类题型。建表语句、标准答案、DML 校验查询与行序要求属于**题目级**，测试点只描述「一套数据」，不照搬算法题的 input/expected 结构
-- 数据库判题：在隔离判题库的一次性临时库 `judge_{提交号}_{测试点号}` 中执行，跑完即 DROP；结果集按列（名严格/型宽容差）+ 单元格（浮点宽容差）+ 可选严格行序比对。逐用例比对结果只对**样例**测试点回显（样例数据本就随题面公开），隐藏测试点仅回报状态，避免由比对结果反推数据与答案
-- 前端 AI 评测：Playwright 无头浏览器 DOM 断言 + 多模态 LLM 视觉/代码审计，输出 UI 还原度、代码质量结构化评分
-- 客观题：单选、多选（漏选半分）、填空（精确/忽略大小写/正则），支持 Markdown + 代码高亮 + LaTeX
-- 考试模式：ACM（即时反馈+罚时排名）与 OI（交卷后统一评测+部分分）
-- 防作弊：切屏计数、禁右键/复制、（后续）AST 代码查重
+---
 
-## 技术栈
+## 📸 界面全景展示 (Interface Showcase)
 
-| 层 | 选型 |
-|---|---|
-| 前端 | Vue 3 + Vite + TypeScript · Monaco 编辑器 · Pinia · Vue Router |
-| 后端 | Java 17+ · Spring Boot 3 · MyBatis · Flyway |
-| 数据库 | MySQL 8 · Redis（状态缓存 + 消息队列）· 独立判题 MySQL（与业务库隔离） |
-| 判题机 | Go · Docker 强隔离沙箱（Cgroups v2 + Namespace + Seccomp）；SQL 判题直连判题 MySQL |
-| 对象存储 | MVP 本地磁盘 / MinIO |
-| 部署 | 单机/云服务器直接部署（MVP） |
+KECE 采用**纯粹极简的硬朗直角（0-Radius）与 Bento Grid 工业美学**设计，摒弃多余拟物与圆角修饰，采用高对比度黑白灰、数码排盘以及标志性的**评测直角状态方块矩阵**。
 
-## 核心架构
+### 1. 全真隔离考场工作台
+* 左侧 36×36px 直角题号导轨，双栏分屏设计（左题面规格/右 Monaco 编辑器与直角字母选项矩阵）。
+* 顶部配备等宽数码倒计时表盘、实时答题进度感知与切屏反作弊上报监控。
+
+![全真隔离考场工作台](docs/images/exam_session.png)
+
+---
+
+### 2. 考试归档战报与 Bento 四大指标方块
+* 考卷提交后即刻生成永久锁定归档战报。顶部采用标志性 **四大指标 Bento 直角大方块**（综合总分、全场名次、AC 通过题数、ACM 罚时）。
+* 下方聚合全场实时天梯榜，配备冠亚季军纯黑、深灰、中灰直角方块勋章。
+
+![考试归档战报与 Bento 指标方块](docs/images/exam_result_bento.png)
+
+---
+
+### 3. 逐题 64×64px 评测状态方块与作答快照回溯
+* 每道试题配备 **64×64px 硬朗直角评测状态方块**（`AC` 翡翠绿、`WA` 猩红、`未答` 石板灰高反差），直观呈现得分折算。
+* 点击卡片即可丝滑展开**原始提交内容快照抽屉**，支持一键代码复制与回溯。
+
+![逐题评测状态方块与作答快照](docs/images/exam_breakdown.png)
+
+---
+
+### 4. 考试大厅卡片与外部实时天梯榜
+* 考试列表卡片清晰呈现赛制标记（ACM/OI）、起止时间及状态。
+* 考生交卷后「进入考场」按钮自动**变灰禁用为 `[已交卷]`**，同步浮现 `[查看战报 →]`。
+* 在考试卡片外部可直接点击 **`[实时排名]`**，原地呼出高反差 Bento 实时天梯榜弹窗，支持 10 秒静默轮询。
+
+![考试大厅卡片流](docs/images/exam_list_card.png)
+
+---
+
+### 5. 题库中心与对齐规格排盘
+* 算法编程、数据库 SQL、客观题三大独立练习模块，支持难度标签严格对齐与多语言快速筛选。
+
+![题库中心](docs/images/question_list.png)
+
+---
+
+## ⚡ 核心产品特性
+
+### 1. 三位一体评测引擎
+- **算法 OJ**：
+  - 支持 **C/C++**、**Java**、**Python** 等多主流语言。
+  - 完整评测状态机（`AC` · `WA` · `TLE` · `MLE` · `RE` · `CE` · `SE`）。
+- **数据库 SQL OJ**：
+  - 原生支持 **MySQL 8.0** 方言，覆盖 `SELECT` 查询与 `DML` 数据修改题型。
+  - **物理级判题强隔离**：每次评测在独立判题 MySQL 实例中生成临时库 `judge_{提交号}_{测试点号}`，跑完立即销毁 DROP，绝不污染业务数据。
+  - 智能对拍算法：按列名严格/类型宽容度 + 浮点精度宽容度 + 可选严格行序智能比对。
+- **客观题测评**：
+  - 单选题、多选题（**漏选半分**算法）、填空题（精确/忽略大小写/正则匹配）。
+  - 全面支持 Markdown 排版、语法高亮与 LaTeX 公式渲染。
+
+### 2. 考试与竞赛全流程系统
+- **双赛制支持**：
+  - **ACM 赛制**：考试中代码题即时提交评测，天梯榜按 AC 题数与罚时（首 AC 分钟数 + 20 分钟错误惩罚）实时排序。
+  - **OI 赛制**：考试期间只保存作答快照，交卷后由后台评测引擎批量入队判分，支持部分测试点加权分值折算。
+- **题目快照组卷机制**：
+  - 试卷创建时即刻**固化题面与分值快照**，题库后续修改不会影响历史考卷的公平性。
+  - 评测机百分制原始得分自动无缝映射为试卷设定分值（$\text{score} = \text{round}(\frac{\text{raw} \times \text{snapshot}}{100})$）。
+- **防作弊系统**：
+  - 浏览器窗口切屏检测、次数记录与考场预警，交卷后记录归档于管理端。
+- **防重入交卷保护**：
+  - 考场交卷后永久锁定作答记录，考场入口安全阻断，考试大厅按钮置灰。
+
+---
+
+## 🛠️ 技术栈与架构
+
+### 技术选型
+
+| 架构层 | 核心技术选型 | 说明 |
+| :--- | :--- | :--- |
+| **前端 SPA** | **Vue 3** + **Vite** + **TypeScript** | 组合式 API + `<script setup>` |
+| **代码编辑** | **Monaco Editor** (`@monaco-editor/vue`) | VS Code 同款内核代码编辑器 |
+| **状态 & 路由** | **Pinia** + **Vue Router 4** | 集中状态管理与鉴权守卫 |
+| **后端 API** | **Spring Boot 3** + **Java 17** | 模块化分层架构、统一响应封装 |
+| **持久化层** | **MyBatis** + **MySQL 8.0** | 业务主库，事务级读写保障 |
+| **缓存 & 队列** | **Redis 7** (Spring Data Redis) | 判题任务解耦队列与评测进度缓存 |
+| **沙箱判题机** | **Go 1.22+** + **Docker Engine** | Cgroups v2 + Namespace 强隔离沙箱 |
+| **数据库判题** | 独立 **MySQL 8.0 容器** (端口 3307) | 一次性临时库隔离运行 |
+
+### 异步评测链路架构
 
 ```
-┌─────────────┐   HTTPS/JWT   ┌──────────────────┐
-│  Vue 3 SPA  │ ────────────▶ │  Spring Boot API │──▶ MySQL
-└─────────────┘               │  (统一响应包装)     │──▶ Redis（状态缓存）
-                              └────────┬─────────┘
-                                       │ 提交任务（消息队列）
-                                       ▼
-                              ┌──────────────────┐
-                              │  Go 判题机 Worker │──▶ Docker 沙箱（编译/运行）
-                              └──────────────────┘      └─▶ 写回评测结果 → Redis
+┌─────────────┐       HTTPS / RESTful      ┌─────────────────────────┐
+│  Vue 3 SPA  │ ─────────────────────────▶ │  Spring Boot 3 后端服务   │ ──▶ MySQL 8.0 (业务库 kece)
+└─────────────┘                            │  (认证鉴权 / 组卷 / 归档)  │
+       │                                   └────────────┬────────────┘
+       │                                                │ 写入任务队列 (judge:queue / judge:sql:queue)
+       │ 轮询状态 (1s)                                     ▼
+       │                                   ┌─────────────────────────┐
+       ▼                                   │   Redis 7 消息中间件     │
+┌─────────────┐                            └────────────┬────────────┘
+│ 获取最新结果 │ ◀───────────────────────────────────────┤ 拉取评测任务 (BRPOP)
+└─────────────┘                                         ▼
+                                           ┌─────────────────────────┐
+                                           │     Go 判题机 Worker     │
+                                           └───────┬───────────┬─────┘
+                                                   │           │
+                     代码编译运行 (Cgroups/Docker)  ▼           ▼ SQL 一次性临时库执行比对
+                                         ┌────────────┐   ┌────────────────┐
+                                         │ Docker 沙箱 │   │ 判题 MySQL 3307│
+                                         └────────────┘   └────────────────┘
 ```
 
-异步评测链路：前端提交 → 后端入库+压队列 → Go 判题机拉取 → Docker 沙箱编译运行 → 状态写 Redis → 前端轮询（1s）获取结果。
+---
 
-数据库 OJ 复用同一条链路，但使用**独立 Redis 键**（`judge:sql:*` / `dbsub:*`）与**独立判题 MySQL 实例**：判题机为每个测试点创建一次性临时库 `judge_{提交号}_{测试点号}`，跑完即 DROP。用户 SQL 只能读到该实例的临时库，无法触及 `kece` 业务库。
-
-## 状态机
-
-| 类型 | 状态 |
-|---|---|
-| 非终态（继续轮询） | `PENDING` → `COMPILING` → `JUDGING` → `AI_REVIEWING`（前端特有） |
-| 终态（停止轮询） | `ACCEPTED` · `WRONG_ANSWER` · `TIME_LIMIT_EXCEEDED` · `MEMORY_LIMIT_EXCEEDED` · `RUNTIME_ERROR` · `COMPILE_ERROR` · `SYSTEM_ERROR` |
-
-## 开发路线
-
-| 阶段 | 目标 | 状态 |
-|---|---|---|
-| Phase 1（MVP） | 注册/题库/算法沙箱评测/客观题 | 已完成（含数据库 OJ、后台管理 P0–P6） |
-| Phase 2 | 数据库 OJ + 组卷倒计时考试 + 消息队列 | 进行中（数据库 OJ/消息队列已完成，组卷考试开发中） |
-| Phase 3 | 前端多文件编辑器 + Playwright + LLM AI 评测 | 待开始 |
-| Phase 4 | 防作弊 + 数据大屏 + 判题集群扩容 | 待开始 |
-
-## 项目结构
+## 📁 项目目录结构
 
 ```
 KECE/
-├── frontend/      # Vue 3 + Vite + TypeScript SPA
-├── backend/       # Spring Boot 3 + Java 17 API 服务
-├── judger/        # Go 判题机 Worker + Docker 沙箱
-├── deploy/        # Docker Compose、启动脚本
-├── docs/          # 架构决策 (ADR)、文档
-└── .github/       # CI/CD 工作流
+├── frontend/               # 前端 Vue 3 + Vite 单页应用
+│   ├── src/
+│   │   ├── api/            # REST API 接口契约封装
+│   │   ├── components/     # Monaco 编辑器、通用导航、消息弹窗
+│   │   ├── router/         # 页面路由与权限导航守卫
+│   │   ├── stores/         # Pinia 用户认证状态与考场上下文
+│   │   ├── views/          # 考场工作台、战报页、题库列表、管理后台
+│   │   └── style.css       # 0-Radius 极简硬朗直角设计系统规范
+├── backend/                # 后端 Spring Boot 3 工程
+│   ├── src/main/java/com/kece/
+│   │   ├── admin/          # 管理控制台模块
+│   │   ├── common/         # 统一响应包装、异常拦截、安全拦截器
+│   │   ├── database/       # 数据库 SQL OJ 题库与提交管理
+│   │   ├── exam/           # 考试场次、组卷快照、交卷评分、排名服务
+│   │   ├── objective/      # 客观题题库与判题器
+│   │   ├── question/       # 算法题目与测试用例管理
+│   │   ├── submission/     # 代码提交管理与异步结果收集调度器
+│   │   └── user/           # 用户认证、JWT 生成、权限管理
+│   └── src/main/resources/
+│       ├── db/migration/   # Flyway 数据库版本化迁移脚本
+│       └── mapper/         # MyBatis SQL 映射文件
+├── judger/                 # Go 语言实现的沙箱判题机服务
+│   ├── cmd/judger/         # 判题机入口进程
+│   └── internal/           # Redis 队列消费者、Docker 沙箱运行器、SQL 对拍器
+├── docs/                   # 架构决策文档 (ADR) 与设计展示资产
+│   └── images/             # 界面展示截图
+└── deploy/                 # Docker Compose 配置与一键运维启动脚本
 ```
 
-## 本地开发
+---
 
-### 前置依赖
-- Node.js 20+
-- Java 17+
-- Go 1.22+
-- Docker Desktop（判题机拉沙箱容器 + judge-mysql/redis 容器）
-- 本机已运行的 MySQL 8.0（业务库 `kece`，账号 `kece/kece123`）
+## 🚀 本地快速启动
 
-### 一键启动（推荐）
-启动脚本会确保 `judge-mysql`（3307）与 `redis`（6379）两个容器在跑、编译判题机，
-然后在后台拉起后端、判题机、前端三个本地进程（已运行的自动跳过，日志写入 `.logs/`）：
+### 前置环境需求
+* **Node.js** 20+
+* **Java** 17+ (推荐 Eclipse Temurin 或 OpenJDK)
+* **Go** 1.22+
+* **Docker Desktop** (用于拉起沙箱容器与测试数据库)
+* **MySQL 8.0** (本机运行，端口 3306，数据库名 `kece`，密码 `kece123`)
+
+---
+
+### 一键协同启动（推荐）
+
+项目在 `deploy/` 下提供了全自动化服务拉起脚本，会自动检查判题容器、编译判题机并启动前端、后端与 Worker 进程：
+
 ```bash
 # Windows PowerShell
-deploy\start.ps1
-# Linux/macOS
-./deploy/start.sh
+.\deploy\start.ps1
+
+# Linux / macOS
+chmod +x ./deploy/start.sh && ./deploy/start.sh
 ```
-停止（容器与原生 MySQL 保留）：
+
+如需终止所有后台进程：
 ```bash
-deploy\stop.ps1    # 或 ./deploy/stop.sh
+.\deploy\stop.ps1    # Linux: ./deploy/stop.sh
 ```
 
-> 业务 MySQL 不在脚本内启动，请保持本机 MySQL 服务运行在 3306。
+---
 
-### 手动分步启动（便于排查）
-依赖容器可单独拉起：
+### 手动分步启动
+
+#### 1. 启动辅助容器（Redis 与 独立判题库）
 ```bash
 docker run -d --name kece-judge-mysql --restart unless-stopped \
   -p 3307:3306 -e MYSQL_ROOT_PASSWORD=judge123 mysql:8.0 \
   --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
 docker run -d --name kece-redis --restart unless-stopped -p 6379:6379 redis:7-alpine
 ```
-后端：
+
+#### 2. 启动后端 Spring Boot
 ```bash
 cd backend
-# dev profile 开启演示数据：种子账号 admin/admin123、teacher/teacher123 与示例题目/作答
-$env:SPRING_PROFILES_ACTIVE = "dev"   # Windows PowerShell；bash 用 export SPRING_PROFILES_ACTIVE=dev
-./mvnw spring-boot:run    # Windows 用 mvnw.cmd spring-boot:run
+$env:SPRING_PROFILES_ACTIVE = "dev"   # Linux/macOS: export SPRING_PROFILES_ACTIVE=dev
+.\mvnw.cmd spring-boot:run           # Linux/macOS: ./mvnw spring-boot:run
 ```
-- API: http://localhost:8080/api/v1
-- Swagger: http://localhost:8080/api/v1/swagger-ui.html
-- 演示数据开关 `kece.demo-data.enabled` 默认关（生产不播种默认口令账号），仅 dev profile 开启
+* **API 接口地址**：`http://localhost:8080/api/v1`
+* **Swagger 交互文档**：`http://localhost:8080/api/v1/swagger-ui.html`
+* 预置种子测试账号：
+  * **管理员**：`admin` / `admin123`
+  * **出题教师**：`teacher` / `teacher123`
 
-前端：
+#### 3. 启动前端 Vite 开发服务器
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-- 页面: http://localhost:5173
+* 访问主站界面：`http://localhost:5173`
 
-判题机（Windows 需先把 go 加入 PATH 或设 GOROOT，默认值见 start.ps1）：
+#### 4. 启动 Go 判题引擎
 ```bash
 cd judger
-go build -o judger.exe ./cmd/judger    # Linux/macOS 去掉 .exe
-REDIS_ADDR=127.0.0.1:6379 JUDGE_MYSQL_HOST=127.0.0.1 JUDGE_MYSQL_PORT=3307 \
-JUDGE_MYSQL_USER=root JUDGE_MYSQL_PASSWORD=judge123 ./judger.exe
+go build -o judger.exe ./cmd/judger
+
+# 启动判题引擎（Windows PowerShell）
+$env:REDIS_ADDR = "127.0.0.1:6379"
+$env:JUDGE_MYSQL_HOST = "127.0.0.1"
+$env:JUDGE_MYSQL_PORT = "3307"
+$env:JUDGE_MYSQL_USER = "root"
+$env:JUDGE_MYSQL_PASSWORD = "judge123"
+.\judger.exe
 ```
 
-> **判题机沙箱镜像**：判题机通过宿主机 Docker daemon 拉起沙箱容器，首次判题会按需拉取
-> `gcc:13`、`eclipse-temurin:17-jdk`、`python:3.12-slim` 三个镜像。建议预先拉取以降低首次判题延迟：
-> ```bash
-> docker pull gcc:13 eclipse-temurin:17-jdk python:3.12-slim
-> ```
-> 判题工作目录通过 `docker-compose.yml` 中的 `/workspace` 卷在宿主机与判题机之间共享，
-> 供沙箱容器挂载编译/运行产物；请勿改动该挂载路径，否则沙箱将无法读取到源码。
+> **提示**：判题机首次运行会自动拉取 `gcc:13`、`eclipse-temurin:17-jdk`、`python:3.12-slim` 基础沙箱镜像。建议提前 `docker pull` 以加速初次运行。
 
-> **判题 MySQL 连接**：判题机通过 `JUDGE_MYSQL_HOST` / `JUDGE_MYSQL_PORT` / `JUDGE_MYSQL_USER` /
-> `JUDGE_MYSQL_PASSWORD` 连接判题 MySQL（容器内默认 `judge-mysql:3306`，本机直跑默认
-> `127.0.0.1:3307`）。该实例必须与业务库隔离——判题机以 root 身份在其上建库建表，
-> 用户 SQL 也在其中执行，绝不能指向 `kece` 业务库。
+---
 
-### 数据库 OJ 出题
-数据库题目暂未提供前端出题入口（不与算法题的用例表单共用一套交互），由 `TEACHER` / `ADMIN`
-账号调接口创建；测试点数据可随题面公开的标记为样例：
+## 📄 关联项目文档
 
-```jsonc
-// POST /api/v1/db-questions    Authorization: Bearer <TEACHER/ADMIN token>
-{
-  "title": "查询研发部员工",
-  "description": "返回 `emp` 表中 `dept = 'RD'` 员工的 id 与 name，按 id 升序",
-  "type": "SELECT",              // SELECT 查询 / DML 数据操作
-  "schemaSql": "CREATE TABLE emp (id INT PRIMARY KEY, name VARCHAR(32), dept VARCHAR(16));",
-  "referenceSql": "SELECT id, name FROM emp WHERE dept = 'RD' ORDER BY id",
-  "verifySql": null,             // DML 题填判分用的校验 SELECT，SELECT 题留空
-  "orderSensitive": true,        // 是否强制行序一致
-  "testCases": [
-    { "seedSql": "INSERT INTO emp VALUES (1,'Alice','RD'),(2,'Bob','HR');", "isSample": 1 },
-    { "seedSql": "INSERT INTO emp VALUES (3,'Cara','RD');",                "isSample": 0 }
-  ]
-}
-```
+* [需求文档 (PRD)](./需求文档.md) — 完整功能规划与用例说明
+* [产品规格说明 (PRODUCT.md)](./PRODUCT.md) — 平台设计原则与技术指标
+* [全局接口契约规范](./全局接口规范与公共约定.md) — REST 响应规范与状态机定义
+* [工程实施计划 (WBS)](./开发计划.md) — 迭代拆解与架构决策记录
 
-> 判分时每个测试点都用题目的 `schemaSql` 建表、灌入该测试点的 `seedSql`：SELECT 题直接跑标准答案与
-> 用户 SQL 取结果集比对；DML 题先跑标准答案再跑 `verifySql` 得期望结果，重置数据后跑用户 SQL 再跑
-> `verifySql` 得实际结果。`referenceSql` 与 `verifySql` 只对 `TEACHER` / `ADMIN` 下发。
+---
 
-## 项目文档
+## 📜 许可证
 
-| 文档 | 说明 |
-|---|---|
-| [需求文档.md](./需求文档.md) | PRD：角色权限、核心模块、非功能需求、分期规划 |
-| [PRODUCT.md](./PRODUCT.md) | 产品规格：定位、技术栈、用户角色、产品原则 |
-| [全局接口规范与公共约定.md](./全局接口规范与公共约定.md) | 接口契约：统一响应、鉴权、异步状态机、核心 API |
-| [开发计划.md](./开发计划.md) | 实施计划：架构决策、WBS 任务分解、工程规范、风险管理 |
-
-## License
-
-私有项目，未经授权不得商用。
+私有项目，未经授权许可不得用于商业运营。

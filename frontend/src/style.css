@@ -10,7 +10,7 @@
   --danger-bg: #fdebec;
   --success: #2f9e44;
   --success-bg: #ebfbee;
-  /* 全站直角风格：圆角一律为 0，需要改回圆角只改这两个值。 */
+  /* 全站直角风格：圆角一律为 0，严格保持直角设计。 */
   --radius: 0;
   --pill: 0;
   --font: 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI',

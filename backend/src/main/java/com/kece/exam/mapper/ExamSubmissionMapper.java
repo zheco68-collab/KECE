@@ -49,6 +49,13 @@ public interface ExamSubmissionMapper {
     /** 考试内提交/作答记录数（删除保护）。 */
     int countByExam(@Param("examId") Long examId);
 
+    /** 查询某考生已交卷（submitted=1）的考试 ID 列表。 */
+    List<Long> findSubmittedExamIdsByUserId(@Param("userId") Long userId);
+
+    /** 查询某考生在某考试中已交卷的记录数。 */
+    int countSubmittedByExamAndUser(
+            @Param("examId") Long examId, @Param("userId") Long userId);
+
     /** 删除考试的全部作答记录（ADMIN 强制删除考试时级联清理）。 */
     int deleteByExam(@Param("examId") Long examId);
 }

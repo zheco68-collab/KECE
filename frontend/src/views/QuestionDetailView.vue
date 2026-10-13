@@ -1,23 +1,24 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { questionApi } from '@/api/question'
 import { submissionApi } from '@/api/submission'
 import { renderMarkdown } from '@/utils/markdown'
 import { useUserStore } from '@/stores/user'
-import CodeEditor from '@/components/CodeEditor.vue'
-import type { Difficulty, Question, Submission, SubmissionStatus } from '@/types'
-import { LANGUAGE_LABELS, STATUS_ABBR, formatMemory, statusTone } from '@/utils/submission'
+import { useToast } from '@/composables/useToast'
+import type { Difficulty, Question } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const { success, error: toastError } = useToast()
 
 const id = computed(() => Number(route.params.id))
 
 const question = ref<Question | null>(null)
 const loading = ref(true)
 const error = ref('')
+const isSolved = ref(false)
 
 const difficultyLabels: Record<Difficulty, string> = {
   EASY: '简单',
@@ -27,473 +28,460 @@ const difficultyLabels: Record<Difficulty, string> = {
 
 const descriptionHtml = computed(() => renderMarkdown(question.value?.description ?? ''))
 
-// ---- 代码提交与评测 ----
-const SUPPORTED_LANGUAGES: string[] = ['cpp', 'java', 'python']
-const TEMPLATES: Record<string, string> = {
-  cpp: '#include <iostream>\nusing namespace std;\n\nint main() {\n    // 在此编写代码\n    return 0;\n}\n',
-  java: 'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        // 在此编写代码\n    }\n}\n',
-  python: '# 在此编写代码\n',
-}
-const FILENAMES: Record<string, string> = { cpp: 'main.cpp', java: 'Main.java', python: 'main.py' }
-
-const TERMINAL_STATUSES: SubmissionStatus[] = [
-  'ACCEPTED',
-  'WRONG_ANSWER',
-  'TIME_LIMIT_EXCEEDED',
-  'MEMORY_LIMIT_EXCEEDED',
-  'RUNTIME_ERROR',
-  'COMPILE_ERROR',
-  'SYSTEM_ERROR',
-]
-
-const languages = computed(() =>
-  (question.value?.languages ?? []).filter((l) => SUPPORTED_LANGUAGES.includes(l)),
-)
-
-const language = ref('cpp')
-const codes = ref<Record<string, string>>({ ...TEMPLATES })
-const submitting = ref(false)
-const submitError = ref('')
-const submission = ref<Submission | null>(null)
-let pollTimer: number | null = null
-
-const progressPercent = computed(() => {
-  const p = submission.value?.progress
-  if (!p || p.totalCases === 0) return 0
-  return Math.round((p.finishedCases / p.totalCases) * 100)
-})
-
-function isTerminal(status: SubmissionStatus): boolean {
-  return TERMINAL_STATUSES.includes(status)
-}
-
-function statusClass(status: SubmissionStatus): string {
-  if (status === 'ACCEPTED') return 'ok'
-  if (isTerminal(status)) return 'wrong'
-  return 'running'
-}
-
-function setLanguage(lang: string) {
-  language.value = lang
-}
-
-async function submit() {
-  if (submitting.value) return
-  if (!userStore.isLoggedIn) {
-    submitError.value = '请先登录后再提交'
-    return
-  }
-  const code = codes.value[language.value] ?? ''
-  if (!code.trim()) {
-    submitError.value = '请先编写代码'
-    return
-  }
-  submitting.value = true
-  submitError.value = ''
-  submission.value = null
+async function copyText(text: string | null | undefined, label: string) {
+  if (!text) return
   try {
-    const s = await submissionApi.submit({
-      questionId: id.value,
-      language: language.value,
-      codeContent: { [FILENAMES[language.value]]: code },
-    })
-    submission.value = s
-    startPolling(s.submissionId)
-  } catch (e) {
-    submitError.value = e instanceof Error ? e.message : '提交失败'
-  } finally {
-    submitting.value = false
+    await navigator.clipboard.writeText(text)
+    success(`${label}已复制到剪贴板`)
+  } catch {
+    toastError('复制失败，请手动选取复制')
   }
 }
 
-function startPolling(submissionId: number) {
-  stopPolling()
-  pollTimer = window.setInterval(async () => {
-    try {
-      const s = await submissionApi.get(submissionId)
-      submission.value = s
-      if (isTerminal(s.status)) {
-        stopPolling()
-      }
-    } catch {
-      stopPolling()
-    }
-  }, 1000)
+function goToSubmit() {
+  router.push(`/questions/${id.value}/submit`)
 }
 
-function stopPolling() {
-  if (pollTimer != null) {
-    window.clearInterval(pollTimer)
-    pollTimer = null
+async function loadSolvedStatus() {
+  if (!userStore.isLoggedIn) return
+  try {
+    const solvedIds = await submissionApi.solved()
+    if (solvedIds.includes(id.value)) {
+      isSolved.value = true
+    }
+  } catch {
+    /* 忽略已通过状态拉取失败 */
   }
 }
 
 onMounted(async () => {
   try {
     question.value = await questionApi.detail(id.value)
-    if (question.value.languages?.length) {
-      language.value = question.value.languages[0]
-    }
+    await loadSolvedStatus()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : '加载失败'
+    error.value = e instanceof Error ? e.message : '加载题目失败'
   } finally {
     loading.value = false
   }
 })
-
-onBeforeUnmount(() => {
-  stopPolling()
-})
 </script>
 
 <template>
-  <div class="detail container">
-    <button class="back" @click="router.back()">← 返回</button>
+  <div class="question-page container">
+    <!-- 加载与异常状态 -->
+    <div v-if="loading" class="state-card card">
+      <div class="loading-spinner"></div>
+      <p class="muted">正在加载编程题描述与测评数据…</p>
+    </div>
 
-    <p v-if="loading" class="muted">加载中…</p>
-    <div v-else-if="error" class="submit-error">{{ error }}</div>
+    <div v-else-if="error" class="state-card card">
+      <div class="error-title">加载失败</div>
+      <p class="error-msg">{{ error }}</p>
+      <button class="btn btn-outline" @click="router.push('/questions')">返回题目列表</button>
+    </div>
 
+    <!-- 题目主内容区 -->
     <template v-else-if="question">
-      <div class="head">
-        <h1 class="title">{{ question.title }}</h1>
-        <span class="badge" :class="`difficulty-${question.difficulty.toLowerCase()}`">
-          {{ difficultyLabels[question.difficulty] }}
-        </span>
-      </div>
-      <div class="meta">
-        <span>时间限制 {{ question.timeLimit ?? '-' }} ms</span>
-        <span>内存限制 {{ question.memoryLimit ?? '-' }} MB</span>
-        <span v-if="question.languages?.length">语言 {{ question.languages.join(' / ') }}</span>
-      </div>
-
-      <!-- eslint-disable-next-line vue/no-v-html -- 内容已由 renderMarkdown 清洗 -->
-      <div class="prose card" v-html="descriptionHtml"></div>
-
-      <h2 class="section-title">样例</h2>
-      <div v-for="(tc, i) in question.sampleTestCases" :key="tc.id" class="case card">
-        <div class="case-head">样例 {{ i + 1 }}</div>
-        <div class="case-block">
-          <div class="case-label">输入</div>
-          <pre>{{ tc.input || '（无）' }}</pre>
-        </div>
-        <div class="case-block">
-          <div class="case-label">输出</div>
-          <pre>{{ tc.expectedOutput }}</pre>
-        </div>
-      </div>
-
-      <h2 class="section-title">提交代码</h2>
-      <div class="submit-card card">
-        <div class="lang-tabs">
-          <button
-            v-for="lang in languages"
-            :key="lang"
-            class="lang-tab"
-            :class="{ active: lang === language }"
-            @click="setLanguage(lang)"
-          >
-            {{ LANGUAGE_LABELS[lang] ?? lang }}
+      <!-- 顶部面包屑与标题卡片 -->
+      <header class="q-header card">
+        <div class="header-top">
+          <button class="btn-back" @click="router.push('/questions')">
+            <svg class="back-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            <span>返回题库列表</span>
           </button>
-        </div>
-
-        <CodeEditor v-model="codes[language]" :language="language" />
-
-        <div class="submit-row">
-          <button
-            v-if="!userStore.isLoggedIn"
-            class="btn btn-primary btn-lg"
-            @click="router.push('/login')"
-          >
-            登录后提交
-          </button>
-          <button v-else class="btn btn-primary btn-lg" :disabled="submitting" @click="submit">
-            {{ submitting ? '提交中…' : '提交评测' }}
-          </button>
-          <span v-if="submission" class="submission-id">提交 #{{ submission.submissionId }}</span>
-        </div>
-
-        <p v-if="submitError" class="submit-error">{{ submitError }}</p>
-
-        <div v-if="submission" class="result">
-          <div class="result-head" :class="statusClass(submission.status)">
-            <span class="status-dot"></span>
-            <span class="status-text">{{ STATUS_ABBR[submission.status] }}</span>
-            <span v-if="submission.result?.timeUsedMs != null" class="result-stat">
-              {{ submission.result.timeUsedMs }} ms
-            </span>
-            <span v-if="submission.result?.memoryUsedKb != null" class="result-stat">
-              {{ formatMemory(submission.result.memoryUsedKb) }}
-            </span>
-            <span v-if="submission.result?.score != null" class="result-score">
-              Score {{ submission.result.score }}
+          <div class="header-status-tags">
+            <span v-if="isSolved" class="solved-pill">✓ 已通过此题</span>
+            <span class="badge diff-pill" :class="`difficulty-${question.difficulty.toLowerCase()}`">
+              {{ difficultyLabels[question.difficulty] }}
             </span>
           </div>
+        </div>
 
-          <div v-if="submission.progress && !isTerminal(submission.status)" class="progress">
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+        <div class="header-main">
+          <h1 class="q-title">
+            <span class="q-id">#{{ question.id }}</span>
+            <span class="q-text">{{ question.title }}</span>
+          </h1>
+          <button class="btn btn-primary btn-submit-cta" @click="goToSubmit">
+            <span>提交代码</span>
+            <svg class="cta-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- 测评限制规格与环境参数 -->
+        <div class="header-meta-row">
+          <div class="meta-item">
+            <span class="meta-label">时间限制</span>
+            <span class="meta-val">{{ question.timeLimit ?? '-' }} ms</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">内存限制</span>
+            <span class="meta-val">{{ question.memoryLimit ?? '-' }} MB</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">支持语言</span>
+            <span class="meta-val">{{ question.languages?.join(' / ') || 'C++ / Java / Python' }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">测评环境</span>
+            <span class="meta-val">Docker 沙箱隔离执行</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- 题面正文卡片 -->
+      <article class="q-body-card card">
+        <div class="card-section-head">
+          <span class="sec-title">题目描述</span>
+        </div>
+        <!-- eslint-disable-next-line vue/no-v-html -- 内容已由 renderMarkdown 清洗 -->
+        <div class="prose" v-html="descriptionHtml"></div>
+      </article>
+
+      <!-- 样例测试数据卡片 -->
+      <section v-if="question.sampleTestCases?.length" class="q-samples-card card">
+        <div class="card-section-head">
+          <span class="sec-title">样例测试数据</span>
+          <span class="sec-count">共 {{ question.sampleTestCases.length }} 组公开样例</span>
+        </div>
+
+        <div class="samples-grid">
+          <div
+            v-for="(tc, i) in question.sampleTestCases"
+            :key="tc.id"
+            class="sample-item card"
+          >
+            <div class="sample-item-head">
+              <span class="sample-idx">样例 #{{ i + 1 }}</span>
             </div>
-            <span class="progress-text">
-              {{ submission.progress.finishedCases }} / {{ submission.progress.totalCases }}
-            </span>
+            <div class="sample-row">
+              <div class="sample-block">
+                <div class="block-bar">
+                  <span class="block-title">标准输入 (stdin)</span>
+                  <button class="btn-copy" @click="copyText(tc.input, `样例 #${i + 1} 输入`)">
+                    复制输入
+                  </button>
+                </div>
+                <pre class="sample-code">{{ tc.input || '（无输入）' }}</pre>
+              </div>
+
+              <div class="sample-block">
+                <div class="block-bar">
+                  <span class="block-title">标准期望输出 (stdout)</span>
+                  <button class="btn-copy" @click="copyText(tc.expectedOutput, `样例 #${i + 1} 期望输出`)">
+                    复制输出
+                  </button>
+                </div>
+                <pre class="sample-code">{{ tc.expectedOutput }}</pre>
+              </div>
+            </div>
           </div>
-
-          <pre
-            v-if="submission.result?.compileErrorLog"
-            class="compile-error"
-          >{{ submission.result.compileErrorLog }}</pre>
-
-          <div v-if="submission.result?.testCasesReport?.length" class="node-statuses">
-            <span
-              v-for="(c, i) in submission.result.testCasesReport"
-              :key="c.caseId"
-              class="node-status"
-              :class="statusTone(c.status as SubmissionStatus)"
-            >
-              <span class="node-no">#{{ i + 1 }}</span>
-              <span class="node-abbr">{{ STATUS_ABBR[c.status as SubmissionStatus] ?? c.status }}</span>
-              <span class="node-meta"
-                >{{ c.timeMs != null ? c.timeMs + 'ms' : '-' }} ·
-                {{ formatMemory(c.memoryKb) }}</span
-              >
-            </span>
-          </div>
-
         </div>
-      </div>
+      </section>
     </template>
   </div>
 </template>
 
 <style scoped>
-.detail {
-  padding-top: 32px;
-  padding-bottom: 56px;
-}
-.head {
+.question-page {
+  padding-top: 24px;
+  padding-bottom: 64px;
   display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-.title {
-  margin: 0;
-  font-size: 26px;
-}
-.meta {
-  display: flex;
-  gap: 24px;
-  flex-wrap: wrap;
-  color: var(--ink-tertiary);
-  font-size: 13px;
-  margin-bottom: 20px;
-}
-.section-title {
-  margin: 32px 0 16px;
-  font-size: 18px;
-}
-.case {
-  margin-bottom: 16px;
-  overflow: hidden;
-}
-.case-head {
-  padding: 12px 20px;
-  font-weight: 600;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg);
-}
-.case-block {
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--line);
-}
-.case-block:last-child {
-  border-bottom: none;
-}
-.case-label {
-  color: var(--ink-tertiary);
-  font-size: 12px;
-  margin-bottom: 6px;
-}
-.case-block pre {
-  margin: 0;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 14px;
-  white-space: pre-wrap;
-  word-break: break-all;
+  flex-direction: column;
+  gap: 20px;
 }
 
-/* 提交区 */
-.submit-card {
-  padding: 20px;
+/* 状态加载卡片 */
+.state-card {
+  padding: 64px 32px;
+  text-align: center;
+  border-radius: 0;
 }
-.lang-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--line);
+  border-top-color: var(--ink);
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 16px;
 }
-.lang-tab {
-  padding: 6px 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--pill);
-  font-size: 13px;
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.error-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--danger);
+  margin-bottom: 8px;
+}
+.error-msg {
   color: var(--ink-secondary);
-  transition:
-    border-color 0.15s ease,
-    color 0.15s ease;
-}
-.lang-tab:hover {
-  color: var(--ink);
-}
-.lang-tab.active {
-  border-color: var(--ink);
-  color: var(--ink);
-  font-weight: 600;
-}
-.submit-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-top: 16px;
-}
-.submission-id {
-  color: var(--ink-tertiary);
-  font-size: 13px;
+  margin-bottom: 24px;
 }
 
-/* 结果面板 */
-.result {
-  margin-top: 20px;
-  border-top: 1px solid var(--line);
-  padding-top: 16px;
+/* 顶部信息卡片 */
+.q-header {
+  padding: 24px 28px;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: var(--surface);
 }
-.result-head {
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-back:hover {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--ink);
+}
+.back-icon {
+  width: 14px;
+  height: 14px;
+}
+.header-status-tags {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 15px;
-  font-weight: 600;
 }
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 0;
-  background: var(--ink-tertiary);
-}
-.result-head.ok .status-dot {
-  background: var(--success);
-}
-.result-head.ok .status-text {
+.solved-pill {
+  font-size: 12px;
+  font-weight: 700;
   color: var(--success);
+  background: #e8f5e9;
+  border: 1px solid var(--success);
+  padding: 3px 8px;
+  border-radius: 0;
 }
-.result-head.wrong .status-dot {
-  background: var(--danger);
-}
-.result-head.wrong .status-text {
-  color: var(--danger);
-}
-.result-stat {
-  color: var(--ink-secondary);
-  font-size: 13px;
-  font-weight: 400;
-}
-.result-score {
-  margin-left: auto;
-  color: var(--ink);
+.diff-pill {
+  border-radius: 0 !important;
+  font-size: 12px;
+  padding: 3px 10px;
+  font-weight: 700;
 }
 
-.progress {
+.header-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.q-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 14px;
+  color: var(--ink);
 }
-.progress-bar {
-  flex: 1;
-  height: 6px;
-  border-radius: var(--pill);
-  background: var(--bg);
-  overflow: hidden;
-}
-.progress-fill {
-  height: 100%;
-  background: var(--ink);
-  border-radius: var(--pill);
-  transition: width 0.3s ease;
-}
-.progress-text {
+.q-id {
   color: var(--ink-tertiary);
-  font-size: 12px;
-  white-space: nowrap;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+.btn-submit-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 0;
+  cursor: pointer;
+}
+.cta-arrow {
+  width: 16px;
+  height: 16px;
 }
 
-.compile-error {
-  margin: 14px 0 0;
-  padding: 14px;
-  background: var(--danger-bg);
-  color: var(--danger);
+.header-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.meta-label {
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.meta-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+/* 章节头部 */
+.card-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.sec-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.sec-count {
+  font-size: 12px;
+  color: var(--ink-tertiary);
+}
+
+/* 题面正文卡片 */
+.q-body-card {
   border-radius: 0;
+  background: var(--surface);
+  overflow: hidden;
+}
+.prose {
+  padding: 28px;
+  line-height: 1.8;
+  font-size: 15px;
+  color: var(--ink);
+}
+.prose :deep(h1),
+.prose :deep(h2),
+.prose :deep(h3) {
+  margin-top: 28px;
+  margin-bottom: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.prose :deep(p) {
+  margin: 14px 0;
+}
+.prose :deep(code) {
+  padding: 2px 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+  border-radius: 0;
+}
+.prose :deep(pre) {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 16px;
+  overflow-x: auto;
+  border-radius: 0;
+}
+
+/* 样例卡片 */
+.q-samples-card {
+  border-radius: 0;
+  background: var(--surface);
+  overflow: hidden;
+}
+.samples-grid {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.sample-item {
+  border-radius: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  overflow: hidden;
+}
+.sample-item-head {
+  padding: 10px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.sample-idx {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.sample-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+@media (max-width: 768px) {
+  .sample-row {
+    grid-template-columns: 1fr;
+  }
+}
+.sample-block {
+  padding: 14px 16px;
+  border-right: 1px solid var(--line);
+}
+.sample-block:last-child {
+  border-right: none;
+}
+.block-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.block-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+}
+.btn-copy {
+  padding: 2px 8px;
+  font-size: 11px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  border-radius: 0;
+  transition: all 0.15s ease;
+}
+.btn-copy:hover {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+.sample-code {
+  margin: 0;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 13px;
   white-space: pre-wrap;
   word-break: break-all;
-}
-
-.node-statuses {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
-}
-.node-status {
-  position: relative;
-  width: 150px;
-  height: 150px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  color: #fff;
-}
-.node-status.ac {
-  background: var(--success);
-}
-.node-status.wa {
-  background: var(--danger);
-}
-.node-status.tle {
-  background: #000;
-}
-.node-status.mle {
-  background: #f57c00;
-}
-.node-status.re {
-  background: #9c27b0;
-}
-.node-status.ce,
-.node-status.se {
-  background: #607d8b;
-}
-.node-no {
-  position: absolute;
-  top: 8px;
-  left: 10px;
-  font-size: 12px;
-  font-weight: 400;
-  opacity: 0.85;
-  line-height: 1;
-}
-.node-abbr {
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1;
-}
-.node-meta {
-  font-size: 11px;
-  font-weight: 400;
-  opacity: 0.9;
-  line-height: 1.3;
+  line-height: 1.5;
+  color: var(--ink);
 }
 
 </style>

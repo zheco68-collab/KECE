@@ -316,7 +316,11 @@ onMounted(() => {
           </thead>
           <tbody>
             <tr v-for="r in codeList" :key="r.submissionId">
-              <td class="mono">#{{ r.submissionId }}</td>
+              <td class="mono">
+                <RouterLink :to="`/submissions/${r.submissionId}?questionId=${r.questionId}`" class="sub-link">
+                  #{{ r.submissionId }}
+                </RouterLink>
+              </td>
               <td class="q-title">
                 <RouterLink :to="`/questions/${r.questionId}`">
                   {{ r.questionTitle || `题目 #${r.questionId}` }}
@@ -364,7 +368,11 @@ onMounted(() => {
           </thead>
           <tbody>
             <tr v-for="r in dbList" :key="r.submissionId">
-              <td class="mono">#{{ r.submissionId }}</td>
+              <td class="mono">
+                <RouterLink :to="`/database/${r.questionId}/result/${r.submissionId}`" class="sub-link">
+                  #{{ r.submissionId }}
+                </RouterLink>
+              </td>
               <td class="q-title">
                 <RouterLink :to="`/database/${r.questionId}`">
                   {{ r.questionTitle || `题目 #${r.questionId}` }}
@@ -593,6 +601,15 @@ onMounted(() => {
 .mono {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 13px;
+}
+.sub-link {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.sub-link:hover {
+  color: var(--ink-secondary);
 }
 .q-title a {
   color: var(--ink);

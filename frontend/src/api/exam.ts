@@ -21,6 +21,7 @@ export interface Exam {
   mode: 'ACM' | 'OI';
   status: number;
   sessionStatus: string | null;
+  submitted?: boolean;
   createdBy: number;
   questions: ExamQuestionItem[];
   createdAt: string;
@@ -145,5 +146,9 @@ export const examApi = {
   submit: (examId: number) => http.post<SubmitResult>(`/exams/${examId}/submit`),
   results: (examId: number) => http.get<ExamSubmissionRow[]>(`/exams/${examId}/results`),
   ranking: (examId: number) => http.get<RankRow[]>(`/exams/${examId}/ranking`),
+  reportSwitch: (examId: number, delta = 1) =>
+    http.post<{ count: number }>(`/exams/${examId}/switch`, { delta }),
+  mySwitchCount: (examId: number) =>
+    http.get<{ count: number }>(`/exams/${examId}/switch`),
   cancel: (examId: number) => http.delete<void>(`/exams/${examId}/cancel`),
 };

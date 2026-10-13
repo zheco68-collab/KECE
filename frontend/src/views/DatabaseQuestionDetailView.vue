@@ -1,22 +1,23 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { databaseApi } from '@/api/database'
 import { renderMarkdown } from '@/utils/markdown'
 import { useUserStore } from '@/stores/user'
-import CodeEditor from '@/components/CodeEditor.vue'
-import type { DbQuestion, DbQuestionType, Submission, SubmissionStatus } from '@/types'
-import { STATUS_ABBR, statusTone } from '@/utils/submission'
+import { useToast } from '@/composables/useToast'
+import type { DbQuestion, DbQuestionType } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const { success, error: toastError } = useToast()
 
 const id = computed(() => Number(route.params.id))
 
 const question = ref<DbQuestion | null>(null)
 const loading = ref(true)
 const error = ref('')
+const isSolved = ref(false)
 
 const typeLabels: Record<DbQuestionType, string> = {
   SELECT: 'SELECT 查询',
@@ -25,628 +26,441 @@ const typeLabels: Record<DbQuestionType, string> = {
 
 const descriptionHtml = computed(() => renderMarkdown(question.value?.description ?? ''))
 const sampleCases = computed(() => (question.value?.testCases ?? []).filter((tc) => tc.isSample === 1))
-/** 结果面板要用它区分「没有比对结果是因为隐藏」与「本来就没有可比对内容」。 */
-const sampleCaseIds = computed(
-  () => new Set(sampleCases.value.map((tc) => tc.id).filter((id): id is number => id != null)),
-)
 
-// ---- SQL 提交与评测 ----
-const SQL_TEMPLATE = '-- 在此编写你的 SQL（单条语句）\n'
-const TERMINAL_STATUSES: SubmissionStatus[] = [
-  'ACCEPTED',
-  'WRONG_ANSWER',
-  'TIME_LIMIT_EXCEEDED',
-  'MEMORY_LIMIT_EXCEEDED',
-  'RUNTIME_ERROR',
-  'COMPILE_ERROR',
-  'SYSTEM_ERROR',
-]
-
-const sql = ref(SQL_TEMPLATE)
-const submitting = ref(false)
-const submitError = ref('')
-const submission = ref<Submission | null>(null)
-let pollTimer: number | null = null
-
-const progressPercent = computed(() => {
-  const p = submission.value?.progress
-  if (!p || p.totalCases === 0) return 0
-  return Math.round((p.finishedCases / p.totalCases) * 100)
-})
-
-function isTerminal(status: SubmissionStatus): boolean {
-  return TERMINAL_STATUSES.includes(status)
-}
-
-function statusClass(status: SubmissionStatus): string {
-  if (status === 'ACCEPTED') return 'ok'
-  if (isTerminal(status)) return 'wrong'
-  return 'running'
-}
-
-/** 判题机对 WA 用例写入结果集 JSON；语法错误等写入纯文本。 */
-interface ParsedResultSet {
-  columns: Array<{ name: string; type: string }>
-  rows: string[][]
-}
-
-function parseResultSet(raw: string | null): ParsedResultSet | null {
-  if (!raw) return null
+async function copyText(text: string | null | undefined, label: string) {
+  if (!text) return
   try {
-    const obj = JSON.parse(raw) as ParsedResultSet
-    if (obj && Array.isArray(obj.columns) && Array.isArray(obj.rows)) return obj
+    await navigator.clipboard.writeText(text)
+    success(`${label}已复制到剪贴板`)
   } catch {
-    /* 非结果集 JSON，按文本展示 */
+    toastError('复制失败，请手动选取复制')
   }
-  return null
 }
 
-function cellText(value: string): string {
-  return value === 'NULL' ? 'NULL' : value
+function goToSubmit() {
+  router.push(`/database/${id.value}/submit`)
 }
 
-/** 逐用例整理展示数据：结果集解析为表格，其余（错误信息等）按文本展示。 */
-interface ReportItem {
-  caseId: number
-  /** 测试点序号（从 1 开始，与状态方块上的 #N 一致）。 */
-  index: number
-  status: string
-  timeMs: number | null
-  isSample: boolean
-  expected: ParsedResultSet | null
-  actual: ParsedResultSet | null
-  expectedRaw: string | null
-  actualRaw: string | null
-}
-
-const reports = computed<ReportItem[]>(() =>
-  (submission.value?.result?.testCasesReport ?? []).map((c, i) => ({
-    caseId: c.caseId,
-    index: i + 1,
-    status: c.status,
-    timeMs: c.timeMs,
-    isSample: sampleCaseIds.value.has(c.caseId),
-    expected: parseResultSet(c.expectedOutput),
-    actual: parseResultSet(c.actualOutput),
-    expectedRaw: c.expectedOutput,
-    actualRaw: c.actualOutput,
-  })),
-)
-
-/** 判题机只在用例未通过时写回期望/实际结果，有内容的才展开比对详情。 */
-const diffReports = computed(() =>
-  reports.value.filter((r) => r.expectedRaw != null || r.actualRaw != null),
-)
-
-/** 未通过却没有比对结果的非样例测试点（被后端脱敏，或判题机本就不产出比对）。 */
-const maskedCount = computed(
-  () =>
-    reports.value.filter(
-      (r) => !r.isSample && r.status !== 'ACCEPTED' && r.expectedRaw == null && r.actualRaw == null,
-    ).length,
-)
-
-async function submit() {
-  if (submitting.value) return
-  if (!userStore.isLoggedIn) {
-    submitError.value = '请先登录后再提交'
-    return
-  }
-  if (!sql.value.trim()) {
-    submitError.value = '请先编写 SQL'
-    return
-  }
-  submitting.value = true
-  submitError.value = ''
-  submission.value = null
+async function loadSolvedStatus() {
+  if (!userStore.isLoggedIn) return
   try {
-    const s = await databaseApi.submit(id.value, sql.value)
-    submission.value = s
-    startPolling(s.submissionId)
-  } catch (e) {
-    submitError.value = e instanceof Error ? e.message : '提交失败'
-  } finally {
-    submitting.value = false
-  }
-}
-
-function startPolling(submissionId: number) {
-  stopPolling()
-  pollTimer = window.setInterval(async () => {
-    try {
-      const s = await databaseApi.getSubmission(submissionId)
-      submission.value = s
-      if (isTerminal(s.status)) stopPolling()
-    } catch {
-      stopPolling()
+    const solvedIds = await databaseApi.solved()
+    if (solvedIds.includes(id.value)) {
+      isSolved.value = true
     }
-  }, 1000)
-}
-
-function stopPolling() {
-  if (pollTimer != null) {
-    window.clearInterval(pollTimer)
-    pollTimer = null
+  } catch {
+    /* 忽略已通过状态拉取失败 */
   }
 }
 
 onMounted(async () => {
   try {
     question.value = await databaseApi.detail(id.value)
+    await loadSolvedStatus()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : '加载失败'
+    error.value = e instanceof Error ? e.message : '加载题目失败'
   } finally {
     loading.value = false
   }
 })
-
-onBeforeUnmount(stopPolling)
 </script>
 
 <template>
-  <div class="detail container">
-    <button class="back" @click="router.back()">← 返回</button>
+  <div class="db-question-page container">
+    <!-- 加载与异常状态 -->
+    <div v-if="loading" class="state-card card">
+      <div class="loading-spinner"></div>
+      <p class="muted">正在加载数据库题目描述与表结构…</p>
+    </div>
 
-    <p v-if="loading" class="muted">加载中…</p>
-    <div v-else-if="error" class="submit-error">{{ error }}</div>
+    <div v-else-if="error" class="state-card card">
+      <div class="error-title">加载失败</div>
+      <p class="error-msg">{{ error }}</p>
+      <button class="btn btn-outline" @click="router.push('/database')">返回数据库题库</button>
+    </div>
 
+    <!-- 题目主内容区 -->
     <template v-else-if="question">
-      <div class="head">
-        <h1 class="title">{{ question.title }}</h1>
-        <span class="badge" :class="`type-${question.type.toLowerCase()}`">
-          {{ typeLabels[question.type] }}
-        </span>
-      </div>
-      <div class="meta">
-        <span>方言 {{ question.dialect }}</span>
-        <span>共 {{ question.testCases?.length ?? 0 }} 个测试点</span>
-        <span v-if="question.orderSensitive">严格行序</span>
-        <span v-if="question.status !== 1">未公开</span>
-      </div>
+      <!-- 顶部信息与导航卡片 -->
+      <header class="q-header card">
+        <div class="header-top">
+          <button class="btn-back" @click="router.push('/database')">
+            <svg class="back-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            <span>返回数据库题库</span>
+          </button>
 
-      <!-- eslint-disable-next-line vue/no-v-html -- 内容已由 renderMarkdown 清洗 -->
-      <div class="prose card" v-html="descriptionHtml"></div>
-
-      <h2 class="section-title">表结构</h2>
-      <div class="schema card">
-        <pre class="sql">{{ question.schemaSql }}</pre>
-      </div>
-
-      <template v-if="sampleCases.length">
-        <h2 class="section-title">样例数据</h2>
-        <div v-for="(tc, i) in sampleCases" :key="tc.id ?? i" class="case card">
-          <div class="case-head">样例 {{ i + 1 }}</div>
-          <div class="case-block">
-            <div class="case-label">初始数据</div>
-            <pre class="sql">{{ tc.seedSql }}</pre>
+          <div class="header-status-tags">
+            <span v-if="isSolved" class="solved-pill">✓ 已通过此题</span>
+            <span class="badge type-pill" :class="`type-${question.type.toLowerCase()}`">
+              {{ typeLabels[question.type] }}
+            </span>
           </div>
         </div>
-      </template>
 
-      <h2 class="section-title">提交 SQL</h2>
-      <div class="submit-card card">
-        <CodeEditor v-model="sql" language="mysql" />
+        <div class="header-main">
+          <h1 class="q-title">
+            <span class="q-id">#{{ question.id }}</span>
+            <span class="q-text">{{ question.title }}</span>
+          </h1>
 
-        <div class="submit-row">
-          <button
-            v-if="!userStore.isLoggedIn"
-            class="btn btn-primary btn-lg"
-            @click="router.push('/login')"
+          <button class="btn btn-primary btn-submit-cta" @click="goToSubmit">
+            <span>提交 SQL</span>
+            <svg class="cta-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- 数据库规格参数栏 -->
+        <div class="header-meta-row">
+          <div class="meta-item">
+            <span class="meta-label">SQL 方言</span>
+            <span class="meta-val">{{ question.dialect || 'MYSQL 8.0' }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">测试点数量</span>
+            <span class="meta-val">{{ question.testCases?.length ?? 0 }} 个独立测试点</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">行序校验规则</span>
+            <span class="meta-val" :class="{ 'highlight-order': question.orderSensitive }">
+              {{ question.orderSensitive ? '严格按行顺序比对 (ORDER BY)' : '无序集合比对' }}
+            </span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">执行沙箱</span>
+            <span class="meta-val">专用隔离 MySQL 实例</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- 题面正文卡片 -->
+      <article class="q-body-card card">
+        <div class="card-section-head">
+          <span class="sec-title">题目要求与说明</span>
+        </div>
+        <!-- eslint-disable-next-line vue/no-v-html -- 内容已由 renderMarkdown 清洗 -->
+        <div class="prose" v-html="descriptionHtml"></div>
+      </article>
+
+      <!-- 表结构定义 (Schema DDL) 卡片 -->
+      <section class="schema-card card">
+        <div class="card-section-head">
+          <span class="sec-title">数据库表结构定义 (Schema DDL)</span>
+          <button class="btn-copy" @click="copyText(question.schemaSql, '建表语句')">
+            复制 DDL
+          </button>
+        </div>
+        <div class="schema-content">
+          <pre class="sql-code">{{ question.schemaSql }}</pre>
+        </div>
+      </section>
+
+      <!-- 样例数据卡片 -->
+      <section v-if="sampleCases.length" class="samples-card card">
+        <div class="card-section-head">
+          <span class="sec-title">样例初始数据 (Seed Data)</span>
+          <span class="sec-count">共 {{ sampleCases.length }} 组公开样例</span>
+        </div>
+
+        <div class="samples-grid">
+          <div
+            v-for="(tc, i) in sampleCases"
+            :key="tc.id ?? i"
+            class="sample-item card"
           >
-            登录后提交
-          </button>
-          <button v-else class="btn btn-primary btn-lg" :disabled="submitting" @click="submit">
-            {{ submitting ? '提交中…' : '提交评测' }}
-          </button>
-          <span v-if="submission" class="submission-id">提交 #{{ submission.submissionId }}</span>
-        </div>
-
-        <p v-if="submitError" class="submit-error">{{ submitError }}</p>
-
-        <div v-if="submission" class="result">
-          <div class="result-head" :class="statusClass(submission.status)">
-            <span class="status-dot"></span>
-            <span class="status-text">{{ STATUS_ABBR[submission.status] ?? submission.status }}</span>
-            <span v-if="submission.result?.timeUsedMs != null" class="result-stat">
-              {{ submission.result.timeUsedMs }} ms
-            </span>
-            <span v-if="submission.result?.score != null" class="result-score">
-              Score {{ submission.result.score }}
-            </span>
-          </div>
-
-          <div v-if="submission.progress && !isTerminal(submission.status)" class="progress">
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+            <div class="sample-item-head">
+              <span class="sample-idx">样例 #{{ i + 1 }}</span>
+              <button class="btn-copy" @click="copyText(tc.seedSql, `样例 #${i + 1} 初始数据`)">
+                复制初始 SQL
+              </button>
             </div>
-            <span class="progress-text">
-              {{ submission.progress.finishedCases }} / {{ submission.progress.totalCases }}
-            </span>
-          </div>
-
-          <!-- 测试点状态：沿用算法题的结果方块 -->
-          <div v-if="reports.length" class="node-statuses">
-            <span
-              v-for="r in reports"
-              :key="r.caseId"
-              class="node-status"
-              :class="statusTone(r.status as SubmissionStatus)"
-            >
-              <span class="node-no">#{{ r.index }}</span>
-              <span class="node-abbr">
-                {{ STATUS_ABBR[r.status as SubmissionStatus] ?? r.status }}
-              </span>
-              <span class="node-meta">{{ r.timeMs != null ? `${r.timeMs}ms` : '-' }}</span>
-            </span>
-          </div>
-
-          <template v-if="diffReports.length">
-            <h3 class="diff-title">比对详情</h3>
-            <div v-for="r in diffReports" :key="r.caseId" class="report card">
-              <div class="report-head">
-                <span class="node-status" :class="statusTone(r.status as SubmissionStatus)">
-                  {{ STATUS_ABBR[r.status as SubmissionStatus] ?? r.status }}
-                </span>
-                <span class="report-no">测试点 {{ r.index }}</span>
-                <span v-if="r.timeMs != null" class="report-meta">{{ r.timeMs }} ms</span>
-              </div>
-
-              <div class="report-body">
-                <div class="report-col">
-                  <div class="case-label">期望结果</div>
-                  <div v-if="r.expected" class="table-wrap">
-                    <table class="rs-table">
-                      <thead>
-                        <tr>
-                          <th v-for="col in r.expected.columns" :key="col.name">{{ col.name }}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr v-for="(row, ri) in r.expected.rows" :key="ri">
-                          <td v-for="(cell, ci) in row" :key="ci">{{ cellText(cell) }}</td>
-                        </tr>
-                        <tr v-if="r.expected.rows.length === 0">
-                          <td :colspan="r.expected.columns.length || 1" class="empty-cell">
-                            （空结果集）
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  <pre v-else class="sql plain">{{ r.expectedRaw }}</pre>
-                </div>
-
-                <div class="report-col">
-                  <div class="case-label">实际结果</div>
-                  <div v-if="r.actual" class="table-wrap">
-                    <table class="rs-table">
-                      <thead>
-                        <tr>
-                          <th v-for="col in r.actual.columns" :key="col.name">{{ col.name }}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr v-for="(row, ri) in r.actual.rows" :key="ri">
-                          <td v-for="(cell, ci) in row" :key="ci">{{ cellText(cell) }}</td>
-                        </tr>
-                        <tr v-if="r.actual.rows.length === 0">
-                          <td :colspan="r.actual.columns.length || 1" class="empty-cell">
-                            （空结果集）
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  <pre v-else class="sql plain error-text">{{ r.actualRaw }}</pre>
-                </div>
-              </div>
+            <div class="sample-content">
+              <pre class="sql-code">{{ tc.seedSql }}</pre>
             </div>
-          </template>
-
-          <!-- 非样例测试点的比对结果由后端脱敏，说明一句，免得误以为判题没跑 -->
-          <p v-if="maskedCount" class="report-note">
-            另有 {{ maskedCount }} 个非样例测试点仅回报状态，不展示比对结果
-          </p>
+          </div>
         </div>
-      </div>
+      </section>
     </template>
   </div>
 </template>
 
 <style scoped>
-.detail {
-  padding-top: 32px;
-  padding-bottom: 56px;
-}
-.head {
+.db-question-page {
+  padding-top: 24px;
+  padding-bottom: 64px;
   display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 12px;
+  flex-direction: column;
+  gap: 20px;
 }
-.title {
-  margin: 0;
-  font-size: 26px;
-}
-.meta {
-  display: flex;
-  gap: 24px;
-  flex-wrap: wrap;
-  color: var(--ink-tertiary);
-  font-size: 13px;
-  margin-bottom: 20px;
-}
-.section-title {
-  margin: 32px 0 16px;
-  font-size: 18px;
-}
-.schema {
-  padding: 16px 20px;
-  overflow-x: auto;
-}
-.case {
-  margin-bottom: 16px;
-  overflow: hidden;
-}
-.case-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
-  font-weight: 600;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg);
-}
-.case-block {
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--line);
-}
-.case-block:last-child {
-  border-bottom: none;
-}
-.case-label {
-  color: var(--ink-tertiary);
-  font-size: 12px;
-  margin-bottom: 6px;
-}
-.sql {
-  margin: 0;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-.sql.plain {
-  padding: 12px 14px;
-  background: var(--bg);
+
+/* 状态加载卡片 */
+.state-card {
+  padding: 64px 32px;
+  text-align: center;
   border-radius: 0;
-  font-size: 12px;
 }
-.error-text {
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--line);
+  border-top-color: var(--ink);
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.error-title {
+  font-size: 20px;
+  font-weight: 700;
   color: var(--danger);
-  background: var(--danger-bg);
+  margin-bottom: 8px;
+}
+.error-msg {
+  color: var(--ink-secondary);
+  margin-bottom: 24px;
 }
 
-/* 提交区 */
-.submit-card {
-  padding: 20px;
+/* 顶部信息卡片 */
+.q-header {
+  padding: 24px 28px;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: var(--surface);
 }
-.submit-row {
+.header-top {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-top: 16px;
+  justify-content: space-between;
 }
-.submission-id {
-  color: var(--ink-tertiary);
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink-secondary);
   font-size: 13px;
+  font-weight: 500;
+  border-radius: 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
-
-/* 结果面板 */
-.result {
-  margin-top: 20px;
-  border-top: 1px solid var(--line);
-  padding-top: 16px;
+.btn-back:hover {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--ink);
 }
-.result-head {
+.back-icon {
+  width: 14px;
+  height: 14px;
+}
+.header-status-tags {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 15px;
-  font-weight: 600;
 }
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 0;
-  background: var(--ink-tertiary);
-}
-.result-head.ok .status-dot {
-  background: var(--success);
-}
-.result-head.ok .status-text {
+.solved-pill {
+  font-size: 12px;
+  font-weight: 700;
   color: var(--success);
+  background: #e8f5e9;
+  border: 1px solid var(--success);
+  padding: 3px 8px;
+  border-radius: 0;
 }
-.result-head.wrong .status-dot {
-  background: var(--danger);
+.type-pill {
+  border-radius: 0 !important;
+  font-size: 12px;
+  padding: 3px 10px;
+  font-weight: 700;
 }
-.result-head.wrong .status-text {
-  color: var(--danger);
+
+.header-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
 }
-.result-stat {
-  color: var(--ink-secondary);
-  font-size: 13px;
-  font-weight: 400;
-}
-.result-score {
-  margin-left: auto;
+.q-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: var(--ink);
 }
-.progress {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 14px;
-}
-.progress-bar {
-  flex: 1;
-  height: 6px;
-  border-radius: var(--pill);
-  background: var(--bg);
-  overflow: hidden;
-}
-.progress-fill {
-  height: 100%;
-  background: var(--ink);
-  border-radius: var(--pill);
-  transition: width 0.3s ease;
-}
-.progress-text {
+.q-id {
   color: var(--ink-tertiary);
-  font-size: 12px;
-  white-space: nowrap;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+.btn-submit-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 0;
+  cursor: pointer;
+}
+.cta-arrow {
+  width: 16px;
+  height: 16px;
 }
 
-/* 测试点状态方块：与算法题结果面板保持一致（尺寸/配色/字体均照搬） */
-.node-statuses {
+.header-meta-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
+  gap: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
 }
-.node-status {
-  position: relative;
-  width: 150px;
-  height: 150px;
+.meta-item {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  color: #fff;
+  gap: 4px;
 }
-.node-no {
-  position: absolute;
-  top: 8px;
-  left: 10px;
-  font-size: 12px;
-  font-weight: 400;
-  opacity: 0.85;
-  line-height: 1;
-}
-.node-abbr {
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1;
-}
-.node-meta {
+.meta-label {
   font-size: 11px;
-  font-weight: 400;
-  opacity: 0.9;
-  line-height: 1.3;
+  color: var(--ink-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.meta-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+.highlight-order {
+  color: #e65100;
 }
 
-/* 比对详情 */
-.diff-title {
-  margin: 20px 0 0;
-  font-size: 14px;
-  color: var(--ink-secondary);
-}
-.report {
-  margin-top: 14px;
-  padding: 14px 16px;
-}
-.report-head {
+/* 章节头部 */
+.card-section-head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
 }
-/* 详情卡头部复用 .node-status 的配色，但收成一行内的小徽章 */
-.report-head .node-status {
-  position: static;
-  width: auto;
-  height: auto;
-  min-width: 44px;
-  padding: 2px 10px;
-  border-radius: var(--pill);
+.sec-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.sec-count {
   font-size: 12px;
-  font-weight: 600;
-  text-align: center;
-}
-.node-status.ac {
-  background: var(--success);
-}
-.node-status.wa {
-  background: var(--danger);
-}
-.node-status.tle {
-  background: #000;
-}
-.node-status.mle {
-  background: #f57c00;
-}
-.node-status.re {
-  background: #9c27b0;
-}
-.node-status.ce,
-.node-status.se {
-  background: #607d8b;
-}
-.node-status.run {
-  background: #9e9e9e;
-}
-.report-no {
-  font-weight: 600;
-  font-size: 14px;
-}
-.report-meta {
   color: var(--ink-tertiary);
-  font-size: 13px;
 }
-.report-note {
-  margin: 10px 0 0;
-  color: var(--ink-tertiary);
-  font-size: 13px;
-}
-.report-body {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-  margin-top: 14px;
-}
-.report-col {
-  min-width: 0;
-}
-.table-wrap {
-  overflow-x: auto;
+.btn-copy {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
   border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  border-radius: 0;
+  transition: all 0.15s ease;
+}
+.btn-copy:hover {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+/* 正文与代码块 */
+.q-body-card,
+.schema-card,
+.samples-card {
+  border-radius: 0;
+  background: var(--surface);
+  overflow: hidden;
+}
+.prose {
+  padding: 28px;
+  line-height: 1.8;
+  font-size: 15px;
+  color: var(--ink);
+}
+.prose :deep(p) {
+  margin: 14px 0;
+}
+.prose :deep(code) {
+  padding: 2px 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
   border-radius: 0;
 }
-.rs-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 12px;
-}
-.rs-table th,
-.rs-table td {
-  padding: 6px 12px;
-  text-align: left;
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-}
-.rs-table thead th {
+.prose :deep(pre) {
   background: var(--bg);
-  color: var(--ink-secondary);
-  font-weight: 600;
+  border: 1px solid var(--line);
+  padding: 16px;
+  overflow-x: auto;
+  border-radius: 0;
 }
-.rs-table tbody tr:last-child td {
-  border-bottom: none;
+
+.schema-content {
+  padding: 20px 24px;
 }
-.empty-cell {
-  color: var(--ink-tertiary);
-  text-align: center;
+.sql-code {
+  margin: 0;
+  padding: 16px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--ink);
+  border-radius: 0;
+}
+
+/* 样例卡片 */
+.samples-grid {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sample-item {
+  border-radius: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  overflow: hidden;
+}
+.sample-item-head {
+  padding: 10px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sample-idx {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.sample-content {
+  padding: 14px 16px;
 }
 </style>

@@ -19,8 +19,8 @@ const userStore = useUserStore()
 const solved = ref<Set<number>>(new Set())
 
 const typeLabels: Record<DbQuestionType, string> = {
-  SELECT: '查询',
-  DML: '数据操作',
+  SELECT: 'SELECT 查询',
+  DML: 'DML 操作',
 }
 const typeLevels: Array<DbQuestionType | ''> = ['', 'SELECT', 'DML']
 
@@ -56,7 +56,7 @@ async function loadSolved() {
     const ids = await databaseApi.solved()
     solved.value = new Set(ids)
   } catch {
-    /* 未登录或加载失败时忽略，仅不显示已通过标记 */
+    /* 未登录或失败时忽略 */
   }
 }
 
@@ -72,12 +72,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="db container">
+  <div class="questions container">
     <div class="page-head">
-      <div>
-        <h1 class="page-title">数据库 OJ</h1>
-        <p class="muted">SQL 编写与结果集校验 · MySQL 8.0 · 共 {{ total }} 题</p>
-      </div>
+      <h1 class="page-title">数据库</h1>
+      <p class="muted">SQL 语句题目 · 共 {{ total }} 题</p>
     </div>
 
     <div class="toolbar card">
@@ -99,11 +97,27 @@ onMounted(() => {
     <p v-if="loading" class="muted loading">加载中…</p>
     <p v-else-if="list.length === 0" class="empty">暂无题目</p>
 
-    <div v-else class="db-list">
-      <RouterLink v-for="q in list" :key="q.id" :to="`/database/${q.id}`" class="db-item card">
-        <span class="badge" :class="`type-${q.type.toLowerCase()}`">{{ typeLabels[q.type] }}</span>
-        <span class="db-title">{{ q.title }}</span>
-        <span v-if="solved.has(q.id)" class="solved-mark" title="已通过">✓</span>
+    <div v-else class="question-list">
+      <RouterLink
+        v-for="q in list"
+        :key="q.id"
+        :to="`/database/${q.id}`"
+        class="question-item card"
+      >
+        <div class="q-main">
+          <h3 class="q-title">{{ q.title }}</h3>
+          <p class="q-meta">
+            {{ q.dialect || 'MySQL 8.0' }} · {{ q.orderSensitive ? '严格按行有序' : '无序比对' }}
+          </p>
+        </div>
+        <div class="q-right">
+          <span class="badge" :class="`type-${q.type.toLowerCase()}`">
+            {{ typeLabels[q.type] || q.type }}
+          </span>
+          <span class="solved-slot">
+            <span v-if="solved.has(q.id)" class="solved-mark" title="已通过">✓</span>
+          </span>
+        </div>
       </RouterLink>
     </div>
 
@@ -165,36 +179,64 @@ onMounted(() => {
 .loading {
   padding: 32px 0;
 }
-.db-list {
+.empty {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--ink-tertiary);
+}
+.question-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-.db-item {
+.question-item {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
   padding: 18px 20px;
-  color: var(--ink);
   transition: box-shadow 0.15s ease;
 }
-.db-item:hover {
+.question-item:hover {
   box-shadow: var(--shadow-md);
 }
-.db-title {
-  flex: 1;
+.q-main {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
+}
+.q-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.badge {
+  min-width: 80px;
+  justify-content: center;
+  text-align: center;
+}
+.solved-slot {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 .solved-mark {
   color: var(--success);
   font-size: 18px;
   font-weight: 700;
   line-height: 1;
-  flex-shrink: 0;
+}
+.q-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 600;
+}
+.q-meta {
+  margin: 0;
+  color: var(--ink-tertiary);
+  font-size: 13px;
 }
 .pagination {
   display: flex;

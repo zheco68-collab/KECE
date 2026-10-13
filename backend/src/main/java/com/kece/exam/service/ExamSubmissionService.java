@@ -38,6 +38,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -238,7 +239,7 @@ public class ExamSubmissionService {
                 != null;
     }
 
-    /** 我的作答与成绩：客观题取 exam_submission 终态；代码/数据库题从 submission 表取评测结果。未结束时按赛制隐藏结果（OI/客观题待公布）。 */
+    /** 我的作答与成绩：以考卷全部题目为基准返回（即使未作答也列出），代码/数据库题沙箱分数按满分折算。 */
     public List<ExamSubmissionVO> myResults(Long examId) {
         AuthUser user = requireUser();
         Exam exam = getExamOrThrow(examId);
@@ -248,20 +249,33 @@ public class ExamSubmissionService {
         }
         boolean ended = status == ExamSessionStatus.ENDED;
         boolean acm = "ACM".equals(exam.getMode());
-        return submissionMapper.findByExamAndUser(examId, user.getId()).stream()
+
+        List<ExamQuestion> examQuestions = examQuestionMapper.findByExamId(examId);
+        List<ExamSubmission> userSubmissions = submissionMapper.findByExamAndUser(examId, user.getId());
+        Map<Long, ExamSubmission> subByQuestionId = userSubmissions.stream()
+                .collect(Collectors.toMap(ExamSubmission::getExamQuestionId, s -> s, (a, b) -> a));
+
+        boolean userSubmitted = ended || userSubmissions.stream().anyMatch(r -> r.getSubmitted() != null && r.getSubmitted() == 1);
+
+        return examQuestions.stream()
                 .map(
-                        row -> {
-                            ExamQuestion eq = examQuestionMapper.findById(row.getExamQuestionId());
-                            String type = eq == null ? "" : eq.getQuestionType();
-                            String rowStatus = row.getStatus();
-                            Integer score = row.getScore();
+                        eq -> {
+                            ExamSubmission row = subByQuestionId.get(eq.getId());
+                            String type = eq.getQuestionType();
+                            String rowStatus = row == null ? null : row.getStatus();
+                            Integer score = row == null ? null : row.getScore();
+                            String answer = row == null ? null : row.getAnswerContent();
+                            String language = row == null ? null : row.getLanguage();
+
                             if ("ALGO".equals(type)) {
                                 Submission s =
                                         codeSubmissionMapper.findLatestByContest(
                                                 examId, user.getId(), eq.getQuestionId());
                                 if (s != null) {
                                     rowStatus = s.getStatus();
-                                    score = s.getScore();
+                                    score = scaleScore(s.getScore(), eq.getScore());
+                                } else if (score != null) {
+                                    score = scaleScore(score, eq.getScore());
                                 }
                             } else if ("DB".equals(type)) {
                                 DbSubmission s =
@@ -269,29 +283,43 @@ public class ExamSubmissionService {
                                                 examId, user.getId(), eq.getQuestionId());
                                 if (s != null) {
                                     rowStatus = s.getStatus();
-                                    score = s.getScore();
+                                    score = scaleScore(s.getScore(), eq.getScore());
+                                } else if (score != null) {
+                                    score = scaleScore(score, eq.getScore());
                                 }
                             }
-                            // 未结束时：客观题与 OI 赛制的编程/数据库题结果不公布
-                            // 但考生已交卷（submitted=1）后可查看自己的判分结果
-                            boolean submitted = row.getSubmitted() != null && row.getSubmitted() == 1;
-                            if (!ended && !submitted && ("OBJECTIVE".equals(type) || !acm)) {
+
+                            // 未作答试题在交卷后明确给 0 分，状态设为 UNANSWERED
+                            if (row == null && userSubmitted) {
+                                score = 0;
+                                rowStatus = "UNANSWERED";
+                            }
+
+                            // 未结束且未交卷时：客观题与 OI 赛制不提前公布
+                            if (!ended && !userSubmitted && ("OBJECTIVE".equals(type) || !acm)) {
                                 rowStatus = null;
                                 score = null;
                             }
                             return ExamSubmissionVO.builder()
-                                    .examQuestionId(row.getExamQuestionId())
-                                    .questionId(eq == null ? null : eq.getQuestionId())
+                                    .examQuestionId(eq.getId())
+                                    .questionId(eq.getQuestionId())
                                     .questionType(type)
-                                    .title(eq == null ? null : eq.getTitle())
+                                    .title(eq.getTitle())
                                     .score(score)
-                                    .fullScore(eq == null ? null : eq.getScore())
-                                    .answer(row.getAnswerContent())
-                                    .language(row.getLanguage())
+                                    .fullScore(eq.getScore())
+                                    .answer(answer)
+                                    .language(language)
                                     .status(rowStatus)
                                     .build();
                         })
                 .toList();
+    }
+
+    private Integer scaleScore(Integer judgeScore, Integer fullScore) {
+        if (judgeScore == null || fullScore == null) {
+            return null;
+        }
+        return (int) Math.round((double) judgeScore * fullScore / 100.0);
     }
 
     /** 客观题同步判分：对错用题目当前答案，得分按快照分值折算（多选漏选半分向上取整）。 */

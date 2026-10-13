@@ -31,6 +31,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -64,8 +66,22 @@ public class ExamService {
         Integer effectiveStatus = (all && isPrivileged()) ? status : 1;
         List<Exam> items = examMapper.findPage(keyword, effectiveStatus, null, offset, safeSize);
         long total = examMapper.count(keyword, effectiveStatus, null);
+
+        AuthUser currentUser = AuthContextHolder.get();
+        Set<Long> submittedExamIds = Collections.emptySet();
+        if (currentUser != null) {
+            submittedExamIds =
+                    new HashSet<>(submissionMapper.findSubmittedExamIdsByUserId(currentUser.getId()));
+        }
+        Set<Long> finalSubmittedExamIds = submittedExamIds;
+
         return new PageResult<>(
-                items.stream().map(e -> toVO(e, false)).toList(), total, safePage, safeSize);
+                items.stream()
+                        .map(e -> toVO(e, false, finalSubmittedExamIds.contains(e.getId())))
+                        .toList(),
+                total,
+                safePage,
+                safeSize);
     }
 
     /** 后台列表：ADMIN 可按 createdBy 筛选，其余角色仅见自己创建的考试。 */
@@ -81,8 +97,21 @@ public class ExamService {
                         : (user == null ? null : user.getId());
         List<Exam> items = examMapper.findPage(keyword, status, targetCreatedBy, offset, safeSize);
         long total = examMapper.count(keyword, status, targetCreatedBy);
+
+        Set<Long> submittedExamIds = Collections.emptySet();
+        if (user != null) {
+            submittedExamIds =
+                    new HashSet<>(submissionMapper.findSubmittedExamIdsByUserId(user.getId()));
+        }
+        Set<Long> finalSubmittedExamIds = submittedExamIds;
+
         return new PageResult<>(
-                items.stream().map(e -> toVO(e, false)).toList(), total, safePage, safeSize);
+                items.stream()
+                        .map(e -> toVO(e, false, finalSubmittedExamIds.contains(e.getId())))
+                        .toList(),
+                total,
+                safePage,
+                safeSize);
     }
 
     public ExamVO detail(Long id) {
@@ -90,7 +119,12 @@ public class ExamService {
         if (exam.getStatus() != 1 && !canManage(exam)) {
             throw new BusinessException(ResultCode.NOT_FOUND, "考试不存在");
         }
-        return toVO(exam, true);
+        AuthUser user = AuthContextHolder.get();
+        boolean submitted = false;
+        if (user != null) {
+            submitted = submissionMapper.countSubmittedByExamAndUser(id, user.getId()) > 0;
+        }
+        return toVO(exam, true, submitted);
     }
 
     @Transactional
@@ -167,6 +201,11 @@ public class ExamService {
         }
         if (status == ExamSessionStatus.ENDED) {
             throw new BusinessException(ResultCode.PARAM_ERROR, "考试已结束，已自动交卷");
+        }
+        AuthUser currentUser = AuthContextHolder.get();
+        if (currentUser != null
+                && submissionMapper.countSubmittedByExamAndUser(id, currentUser.getId()) > 0) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "您已交卷，无法再次进入考场，请查看战报");
         }
         long remainingSeconds = Duration.between(now, exam.getEndTime()).getSeconds();
         List<ExamSessionQuestionVO> questions =
@@ -423,6 +462,10 @@ public class ExamService {
     }
 
     private ExamVO toVO(Exam exam, boolean withQuestions) {
+        return toVO(exam, withQuestions, null);
+    }
+
+    private ExamVO toVO(Exam exam, boolean withQuestions, Boolean submitted) {
         List<ExamQuestionVO> questions =
                 withQuestions
                         ? examQuestionMapper.findByExamId(exam.getId()).stream()
@@ -439,6 +482,7 @@ public class ExamService {
                 .mode(exam.getMode())
                 .status(exam.getStatus())
                 .sessionStatus(exam.getSessionStatus())
+                .submitted(submitted)
                 .createdBy(exam.getCreatedBy())
                 .questions(questions)
                 .createdAt(exam.getCreatedAt())

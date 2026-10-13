@@ -114,7 +114,9 @@ onMounted(() => {
           <span class="badge" :class="`difficulty-${q.difficulty.toLowerCase()}`">
             {{ difficultyLabels[q.difficulty] }}
           </span>
-          <span v-if="solved.has(q.id)" class="solved-mark" title="已通过">✓</span>
+          <span class="solved-slot">
+            <span v-if="solved.has(q.id)" class="solved-mark" title="已通过">✓</span>
+          </span>
         </div>
       </RouterLink>
     </div>
@@ -199,7 +201,20 @@ onMounted(() => {
 .q-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.badge {
+  min-width: 48px;
+  justify-content: center;
+  text-align: center;
+}
+.solved-slot {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 .solved-mark {

@@ -3,10 +3,16 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as monaco from 'monaco-editor/editor/editor.api'
 import './monaco-setup'
 
-const props = defineProps<{
-  modelValue: string
-  language: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    modelValue: string
+    language: string
+    height?: string
+  }>(),
+  {
+    height: '420px',
+  },
+)
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
@@ -58,12 +64,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="container" class="code-editor"></div>
+  <div ref="container" class="code-editor" :style="{ height: props.height }"></div>
 </template>
 
 <style scoped>
 .code-editor {
-  height: 420px;
+  width: 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;

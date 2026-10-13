@@ -74,6 +74,16 @@
         SELECT COUNT(*) FROM `exam_submission` WHERE exam_id = #{examId}
     </select>
 
+    <select id="findSubmittedExamIdsByUserId" resultType="java.lang.Long">
+        SELECT DISTINCT exam_id FROM `exam_submission`
+        WHERE user_id = #{userId} AND submitted = 1
+    </select>
+
+    <select id="countSubmittedByExamAndUser" resultType="int">
+        SELECT COUNT(*) FROM `exam_submission`
+        WHERE exam_id = #{examId} AND user_id = #{userId} AND submitted = 1
+    </select>
+
     <delete id="deleteByExam">
         DELETE FROM `exam_submission` WHERE exam_id = #{examId}
     </delete>

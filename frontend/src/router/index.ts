@@ -1,16 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { useUserStore } from '@/stores/user';
 
-// 路由元信息类型声明：meta.roles 是后台路由的角色门槛。
+// 路由元信息类型声明：meta.roles 是后台路由的角色门槛，meta.title 是页面标题。
 declare module 'vue-router' {
   interface RouteMeta {
     roles?: string[];
+    title?: string;
   }
 }
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    // 前台考生端主站路由（使用 DefaultLayout）
     {
       path: '/',
       component: () => import('@/layouts/DefaultLayout.vue'),
@@ -27,9 +29,24 @@ const router = createRouter({
           component: () => import('@/views/QuestionDetailView.vue'),
         },
         {
+          path: 'questions/:id/submit',
+          name: 'question-submit',
+          component: () => import('@/views/QuestionSubmitView.vue'),
+        },
+        {
+          path: 'questions/:id/result/:submissionId',
+          name: 'question-result',
+          component: () => import('@/views/QuestionResultView.vue'),
+        },
+        {
           path: 'submissions',
           name: 'submissions',
           component: () => import('@/views/SubmissionsView.vue'),
+        },
+        {
+          path: 'submissions/:submissionId',
+          name: 'submission-detail',
+          component: () => import('@/views/QuestionResultView.vue'),
         },
         {
           path: 'database',
@@ -42,8 +59,23 @@ const router = createRouter({
           component: () => import('@/views/DatabaseQuestionDetailView.vue'),
         },
         {
+          path: 'database/:id/submit',
+          name: 'database-submit',
+          component: () => import('@/views/DatabaseQuestionSubmitView.vue'),
+        },
+        {
+          path: 'database/:id/result/:submissionId',
+          name: 'database-result',
+          component: () => import('@/views/DatabaseQuestionResultView.vue'),
+        },
+        {
           path: 'database-submissions',
           redirect: '/submissions',
+        },
+        {
+          path: 'database-submissions/:submissionId',
+          name: 'database-submission-detail',
+          component: () => import('@/views/DatabaseQuestionResultView.vue'),
         },
         {
           path: 'frontend',
@@ -76,94 +108,97 @@ const router = createRouter({
           name: 'exam-result',
           component: () => import('@/views/ExamResultView.vue'),
         },
+      ],
+    },
+    // 独立后台管理端路由（使用独立侧边栏 AdminLayout）
+    {
+      path: '/admin',
+      component: () => import('@/layouts/AdminLayout.vue'),
+      redirect: '/admin/questions',
+      children: [
         {
-          path: 'admin',
-          name: 'admin',
-          redirect: '/admin/questions',
-        },
-        {
-          path: 'admin/questions',
+          path: 'questions',
           name: 'admin-questions',
           component: () => import('@/views/admin/AdminQuestionsView.vue'),
-          meta: { roles: ['ADMIN', 'TEACHER'] },
+          meta: { roles: ['ADMIN', 'TEACHER'], title: '编程题管理' },
         },
         {
-          path: 'admin/questions/new',
+          path: 'questions/new',
           name: 'admin-question-new',
           component: () => import('@/views/admin/QuestionEditView.vue'),
-          meta: { roles: ['ADMIN', 'TEACHER'] },
+          meta: { roles: ['ADMIN', 'TEACHER'], title: '新建编程题' },
         },
         {
-          path: 'admin/questions/:id/edit',
+          path: 'questions/:id/edit',
           name: 'admin-question-edit',
           component: () => import('@/views/admin/QuestionEditView.vue'),
-          meta: { roles: ['ADMIN', 'TEACHER'] },
+          meta: { roles: ['ADMIN', 'TEACHER'], title: '编辑编程题' },
         },
         {
-          path: 'admin/db-questions',
+          path: 'db-questions',
           name: 'admin-db-questions',
           component: () => import('@/views/admin/AdminDbQuestionsView.vue'),
-          meta: { roles: ['ADMIN', 'TEACHER'] },
+          meta: { roles: ['ADMIN', 'TEACHER'], title: '数据库题管理' },
         },
         {
-          path: 'admin/db-questions/new',
+          path: 'db-questions/new',
           name: 'admin-db-question-new',
           component: () => import('@/views/admin/DbQuestionEditView.vue'),
-          meta: { roles: ['ADMIN', 'TEACHER'] },
+          meta: { roles: ['ADMIN', 'TEACHER'], title: '新建数据库题' },
         },
         {
-          path: 'admin/db-questions/:id/edit',
+          path: 'db-questions/:id/edit',
           name: 'admin-db-question-edit',
           component: () => import('@/views/admin/DbQuestionEditView.vue'),
-          meta: { roles: ['ADMIN', 'TEACHER'] },
+          meta: { roles: ['ADMIN', 'TEACHER'], title: '编辑数据库题' },
         },
         {
-          path: 'admin/objective-questions',
+          path: 'objective-questions',
           name: 'admin-objective-questions',
           component: () => import('@/views/admin/AdminObjectiveQuestionsView.vue'),
-          meta: { roles: ['ADMIN', 'TEACHER'] },
+          meta: { roles: ['ADMIN', 'TEACHER'], title: '客观题管理' },
         },
         {
-          path: 'admin/objective-questions/new',
+          path: 'objective-questions/new',
           name: 'admin-objective-question-new',
           component: () => import('@/views/admin/ObjectiveQuestionEditView.vue'),
-          meta: { roles: ['ADMIN', 'TEACHER'] },
+          meta: { roles: ['ADMIN', 'TEACHER'], title: '新建客观题' },
         },
         {
-          path: 'admin/objective-questions/:id/edit',
+          path: 'objective-questions/:id/edit',
           name: 'admin-objective-question-edit',
           component: () => import('@/views/admin/ObjectiveQuestionEditView.vue'),
-          meta: { roles: ['ADMIN', 'TEACHER'] },
+          meta: { roles: ['ADMIN', 'TEACHER'], title: '编辑客观题' },
         },
         {
-          path: 'admin/exams',
+          path: 'exams',
           name: 'admin-exams',
           component: () => import('@/views/admin/AdminExamsView.vue'),
-          meta: { roles: ['ADMIN', 'TEACHER'] },
+          meta: { roles: ['ADMIN', 'TEACHER'], title: '考试管理' },
         },
         {
-          path: 'admin/exams/new',
+          path: 'exams/new',
           name: 'admin-exam-new',
           component: () => import('@/views/admin/ExamEditView.vue'),
-          meta: { roles: ['ADMIN', 'TEACHER'] },
+          meta: { roles: ['ADMIN', 'TEACHER'], title: '新建试卷' },
         },
         {
-          path: 'admin/exams/:id/edit',
+          path: 'exams/:id/edit',
           name: 'admin-exam-edit',
           component: () => import('@/views/admin/ExamEditView.vue'),
-          meta: { roles: ['ADMIN', 'TEACHER'] },
+          meta: { roles: ['ADMIN', 'TEACHER'], title: '编辑试卷' },
         },
         {
-          path: 'admin/users',
+          path: 'users',
           name: 'admin-users',
           component: () => import('@/views/admin/AdminUsersView.vue'),
-          meta: { roles: ['ADMIN'] },
+          meta: { roles: ['ADMIN'], title: '用户管理' },
         },
         {
-          path: 'admin/submissions',
+          path: 'submissions',
           name: 'admin-submissions',
           component: () => import('@/views/admin/AdminSubmissionsView.vue'),
-          meta: { roles: ['ADMIN', 'TEACHER'] },
+          meta: { roles: ['ADMIN', 'TEACHER'], title: '提交监控' },
         },
       ],
     },

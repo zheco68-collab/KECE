@@ -45,12 +45,17 @@ function logout() {
             {{ userStore.hasRole('ADMIN') ? '管理员' : '出题人' }}
           </span>
           <button class="btn btn-ghost btn-sm" @click="logout">退出</button>
-          <RouterLink
+          <a
             v-if="userStore.hasRole('ADMIN') || userStore.hasRole('TEACHER')"
-            to="/admin"
-            class="btn btn-primary btn-sm"
-            >后台管理</RouterLink
+            href="/admin"
+            target="_blank"
+            class="btn btn-primary btn-sm admin-entry-btn"
           >
+            <span>后台管理</span>
+            <svg class="external-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M3 1h8v8M11 1 5 7" />
+            </svg>
+          </a>
         </template>
         <RouterLink v-else to="/login" class="btn btn-primary btn-sm">登录</RouterLink>
       </div>
@@ -131,6 +136,16 @@ function logout() {
   border-radius: var(--pill);
   padding: 1px 10px;
   white-space: nowrap;
+}
+.admin-entry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.external-icon {
+  width: 10px;
+  height: 10px;
+  stroke-width: 2;
 }
 @media (max-width: 860px) {
   .nav {

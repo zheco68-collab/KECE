@@ -108,7 +108,9 @@ onMounted(() => {
         <span class="badge" :class="`type-${q.type.toLowerCase()}`">{{ typeLabels[q.type] }}</span>
         <p class="obj-content">{{ q.content }}</p>
         <span class="obj-score">{{ q.score }} 分</span>
-        <span v-if="solved.has(q.id)" class="solved-mark" title="已通过">✓</span>
+        <span class="solved-slot">
+          <span v-if="solved.has(q.id)" class="solved-mark" title="已通过">✓</span>
+        </span>
       </RouterLink>
     </div>
 
@@ -196,6 +198,14 @@ onMounted(() => {
 .obj-score {
   color: var(--ink-tertiary);
   font-size: 13px;
+  flex-shrink: 0;
+}
+.solved-slot {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 .solved-mark {

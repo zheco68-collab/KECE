@@ -1,153 +1,791 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { useRoute } from 'vue-router';
-import { examApi, type ExamSubmissionRow, type RankRow } from '@/api/exam';
-import { ApiError } from '@/api/request';
-import DataTable from '@/components/DataTable.vue';
-import { STATUS_ABBR, statusTone } from '@/utils/submission';
-import type { SubmissionStatus } from '@/types';
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { examApi, type ExamSubmissionRow, type RankRow } from '@/api/exam'
+import { ApiError } from '@/api/request'
+import { useUserStore } from '@/stores/user'
+import { useToast } from '@/composables/useToast'
+import { STATUS_ABBR, statusTone } from '@/utils/submission'
+import type { SubmissionStatus } from '@/types'
 
-const route = useRoute();
-const examId = Number(route.params.id);
+const route = useRoute()
+const router = useRouter()
+const userStore = useUserStore()
+const { success, error: toastError } = useToast()
 
-const results = ref<ExamSubmissionRow[]>([]);
-const ranking = ref<RankRow[]>([]);
-const loading = ref(true);
-const error = ref('');
+const examId = Number(route.params.id)
 
-const resultColumns = [
-  { key: 'title', label: '题目' },
-  { key: 'questionType', label: '题型', width: '90px' },
-  { key: 'status', label: '评测', width: '90px' },
-  { key: 'score', label: '得分', width: '120px' },
-];
+const results = ref<ExamSubmissionRow[]>([])
+const ranking = ref<RankRow[]>([])
+const loading = ref(true)
+const error = ref('')
 
-const rankColumns = [
-  { key: 'rank', label: '名次', width: '60px' },
-  { key: 'username', label: '考生', width: '120px' },
-  { key: 'solved', label: '通过', width: '70px' },
-  { key: 'penaltyMinutes', label: '罚时(分)', width: '90px' },
-  { key: 'totalScore', label: '总分', width: '80px' },
-];
+const expandedQuestionId = ref<number | null>(null)
 
-const rankRows = ref<Array<RankRow & { rank: number }>>([]);
+const rankRows = computed(() => ranking.value.map((row, index) => ({ ...row, rank: index + 1 })))
+
+const myRankInfo = computed(() => {
+  if (!userStore.userInfo) return null
+  return (
+    rankRows.value.find(
+      (r) => r.userId === userStore.userInfo?.id || r.username === userStore.userInfo?.username,
+    ) ?? null
+  )
+})
+
+const myTotalScore = computed(() => {
+  if (myRankInfo.value) return myRankInfo.value.totalScore
+  return results.value.reduce((acc, r) => acc + (r.score ?? 0), 0)
+})
+
+const myFullScore = computed(() => {
+  if (myRankInfo.value) return myRankInfo.value.fullScore
+  return results.value.reduce((acc, r) => acc + r.fullScore, 0)
+})
+
+const mySolvedCount = computed(() => {
+  if (myRankInfo.value) return myRankInfo.value.solved
+  return results.value.filter((r) => r.status === 'ACCEPTED').length
+})
 
 const typeLabels: Record<string, string> = {
-  ALGO: '编程',
-  DB: '数据库',
+  ALGO: '编程算法',
+  DB: '数据库 SQL',
   OBJECTIVE: '客观题',
-};
+}
+
+function getStatusAbbr(status: string | null | undefined): string {
+  if (!status) return '待评'
+  if (status === 'UNANSWERED') return '未答'
+  return STATUS_ABBR[status as SubmissionStatus] ?? status
+}
+
+function getStatusClass(status: string | null | undefined): string {
+  if (!status) return 'pending'
+  if (status === 'UNANSWERED') return 'unanswered'
+  return statusTone(status as SubmissionStatus)
+}
+
+function toggleExpand(id: number) {
+  expandedQuestionId.value = expandedQuestionId.value === id ? null : id
+}
+
+async function copyAnswer(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    success('作答内容已复制到剪贴板')
+  } catch {
+    toastError('复制失败，请手动选取')
+  }
+}
 
 onMounted(async () => {
   try {
-    const [r, rk] = await Promise.all([examApi.results(examId), examApi.ranking(examId)]);
-    results.value = r;
-    ranking.value = rk;
-    rankRows.value = rk.map((row, index) => ({ ...row, rank: index + 1 }));
+    const [r, rk] = await Promise.all([examApi.results(examId), examApi.ranking(examId)])
+    results.value = r
+    ranking.value = rk
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : '加载失败';
+    error.value = e instanceof ApiError ? e.message : '加载考试成绩失败'
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-});
+})
 </script>
 
 <template>
-  <div class="exam-result container">
-    <h1 class="page-title">考试结果</h1>
+  <div class="exam-result-page container">
+    <!-- 状态反馈 -->
+    <div v-if="loading" class="state-card card">
+      <div class="loading-spinner"></div>
+      <p class="muted">正在结算考卷成绩并汇总排行榜…</p>
+    </div>
 
-    <p v-if="loading" class="muted">加载中…</p>
-    <p v-else-if="error" class="submit-error">{{ error }}</p>
+    <div v-else-if="error" class="state-card card">
+      <div class="error-title">成绩结算失败</div>
+      <p class="error-msg">{{ error }}</p>
+      <button class="btn btn-primary" @click="router.push('/exams')">返回考试大厅</button>
+    </div>
 
     <template v-else>
-      <section class="card section">
-        <h2 class="section-title">我的作答</h2>
-        <DataTable :columns="resultColumns" :rows="results" row-key="examQuestionId">
-          <template #cell-questionType="{ row }">
-            <span>{{ typeLabels[row.questionType] ?? row.questionType }}</span>
-          </template>
-          <template #cell-status="{ row }">
-            <span
-              v-if="row.status"
-              class="status-badge"
-              :class="statusTone(row.status as SubmissionStatus)"
-            >
-              {{ STATUS_ABBR[row.status as SubmissionStatus] ?? row.status }}
+      <!-- 顶部信息头 -->
+      <header class="result-header card">
+        <div class="header-top">
+          <button class="btn-back" @click="router.push('/exams')">
+            <svg class="back-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            <span>返回考试大厅</span>
+          </button>
+          <span class="report-badge">考试归档战报</span>
+        </div>
+
+        <div class="header-main">
+          <h1 class="result-title">
+            <span class="exam-tag mono">#{{ examId }}</span>
+            <span class="title-text">考试成绩与结算战报</span>
+          </h1>
+          <p class="result-subtitle">
+            作答记录已永久锁定存盘 · 自动判题与加权折算已完成
+          </p>
+        </div>
+      </header>
+
+      <!-- -------------------------------------------------------------
+           用户的核心标志性设计：4 大指标直角大方块矩阵 (Hero Stat Bento)
+           ------------------------------------------------------------- -->
+      <section class="stat-squares-grid">
+        <!-- 方块 1: 综合总分 -->
+        <div class="stat-square card">
+          <div class="stat-square-head">综合总得分</div>
+          <div class="stat-square-body">
+            <span class="stat-num score-num mono">{{ myTotalScore }}</span>
+            <span class="stat-unit mono">/ {{ myFullScore }}</span>
+          </div>
+          <div class="stat-square-foot">
+            <span class="foot-tag">
+              得分率 {{ myFullScore > 0 ? Math.round((myTotalScore / myFullScore) * 100) : 0 }}%
             </span>
-            <span v-else class="muted">待公布</span>
-          </template>
-          <template #cell-score="{ row }">
-            <span class="mono">{{ row.score ?? '-' }} / {{ row.fullScore }}</span>
-          </template>
-        </DataTable>
+          </div>
+        </div>
+
+        <!-- 方块 2: 全场名次 -->
+        <div class="stat-square card">
+          <div class="stat-square-head">全场最终排名</div>
+          <div class="stat-square-body">
+            <span class="stat-num rank-num mono">
+              {{ myRankInfo ? `#${myRankInfo.rank}` : '-' }}
+            </span>
+          </div>
+          <div class="stat-square-foot">
+            <span class="foot-tag">
+              全场共 {{ rankRows.length }} 名考生完赛
+            </span>
+          </div>
+        </div>
+
+        <!-- 方块 3: 通过试题 -->
+        <div class="stat-square card">
+          <div class="stat-square-head">通过题目数 (AC)</div>
+          <div class="stat-square-body">
+            <span class="stat-num ac-num mono">{{ mySolvedCount }}</span>
+            <span class="stat-unit mono">/ {{ results.length }}</span>
+          </div>
+          <div class="stat-square-foot">
+            <span class="foot-tag">
+              完成率 {{ results.length > 0 ? Math.round((mySolvedCount / results.length) * 100) : 0 }}%
+            </span>
+          </div>
+        </div>
+
+        <!-- 方块 4: 总罚时/状态 -->
+        <div class="stat-square card">
+          <div class="stat-square-head">ACM 累计罚时</div>
+          <div class="stat-square-body">
+            <span class="stat-num penalty-num mono">
+              {{ myRankInfo?.penaltyMinutes != null ? myRankInfo.penaltyMinutes : '-' }}
+            </span>
+            <span class="stat-unit">分钟</span>
+          </div>
+          <div class="stat-square-foot">
+            <span class="foot-tag">含错误提交罚时累计</span>
+          </div>
+        </div>
       </section>
 
-      <section class="card section">
-        <h2 class="section-title">排行榜</h2>
-        <DataTable :columns="rankColumns" :rows="rankRows" row-key="userId">
-          <template #cell-rank="{ row }">
-            <span class="mono rank-no">{{ row.rank }}</span>
-          </template>
-          <template #cell-totalScore="{ row }">
-            <span class="mono">{{ row.totalScore }} / {{ row.fullScore }}</span>
-          </template>
-        </DataTable>
+      <!-- 试题得分明细矩阵卡片流 -->
+      <section class="breakdown-section card">
+        <div class="section-head">
+          <div class="head-left">
+            <h2 class="section-title">逐题得分明细与作答回溯</h2>
+            <span class="section-desc">共 {{ results.length }} 题 · 点击卡片可展开查看你在考场中的原始作答</span>
+          </div>
+        </div>
+
+        <div class="breakdown-list">
+          <article
+            v-for="(row, idx) in results"
+            :key="row.examQuestionId"
+            class="question-result-card card"
+            :class="{ open: expandedQuestionId === row.examQuestionId }"
+          >
+            <div class="q-card-main" @click="toggleExpand(row.examQuestionId)">
+              <!-- ---------------------------------------------------------
+                   核心标志性直角方块：64×64px 试题评测状态方块 (严格保留设计感)
+                   --------------------------------------------------------- -->
+              <div
+                class="q-status-square"
+                :class="getStatusClass(row.status)"
+              >
+                <span class="sq-abbr mono">
+                  {{ getStatusAbbr(row.status) }}
+                </span>
+                <span class="sq-score mono">
+                  {{ row.score != null ? `+${row.score}` : '-' }}
+                </span>
+              </div>
+
+              <div class="q-card-info">
+                <div class="q-card-title-row">
+                  <span class="q-seq mono">#{{ idx + 1 < 10 ? `0${idx + 1}` : idx + 1 }}</span>
+                  <h3 class="q-title">{{ row.title }}</h3>
+                  <span class="badge" :class="`type-${row.questionType.toLowerCase()}`">
+                    {{ typeLabels[row.questionType] ?? row.questionType }}
+                  </span>
+                </div>
+
+                <div class="q-card-meta-row">
+                  <span class="meta-score mono">
+                    本题得分: <strong>{{ row.score ?? '-' }}</strong> / {{ row.fullScore }} 分
+                  </span>
+                  <span v-if="row.language" class="meta-lang mono">
+                    语言: {{ row.language }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="q-card-toggle">
+                <span class="toggle-text">{{ expandedQuestionId === row.examQuestionId ? '收起作答' : '展开作答' }}</span>
+                <svg
+                  class="toggle-arrow"
+                  :class="{ rotate: expandedQuestionId === row.examQuestionId }"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </div>
+            </div>
+
+            <!-- 展开的作答查看区 -->
+            <div v-if="expandedQuestionId === row.examQuestionId" class="q-card-drawer">
+              <div class="drawer-head">
+                <span class="drawer-title">考生提交内容快照</span>
+                <button class="btn-copy" @click.stop="copyAnswer(row.answer)">复制内容</button>
+              </div>
+              <pre class="drawer-code mono">{{ row.answer || '（未作答或内容为空）' }}</pre>
+            </div>
+          </article>
+        </div>
       </section>
+
+      <!-- 全场天梯排行榜 -->
+      <section class="ranking-section card">
+        <div class="section-head">
+          <div class="head-left">
+            <h2 class="section-title">全场实时天梯排行榜</h2>
+            <span class="section-desc">基于 ACM/OI 竞赛标准规则实时计算 · 共 {{ rankRows.length }} 名考生</span>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="rank-table">
+            <thead>
+              <tr>
+                <th class="th-rank">名次</th>
+                <th>考生账号</th>
+                <th class="th-num">通过试题 (AC)</th>
+                <th class="th-num">累计罚时</th>
+                <th class="th-num">综合得分</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="r in rankRows"
+                :key="r.userId"
+                class="rank-row"
+                :class="{
+                  'is-me': userStore.userInfo && (r.userId === userStore.userInfo.id || r.username === userStore.userInfo.username),
+                  'top-1': r.rank === 1,
+                  'top-2': r.rank === 2,
+                  'top-3': r.rank === 3,
+                }"
+              >
+                <td class="td-rank">
+                  <!-- 冠亚季军硬朗直角方块勋章 -->
+                  <div class="rank-square-badge mono" :class="`rank-${r.rank}`">
+                    {{ r.rank }}
+                  </div>
+                </td>
+                <td class="td-user">
+                  <span class="username-text">{{ r.username }}</span>
+                  <span
+                    v-if="userStore.userInfo && (r.userId === userStore.userInfo.id || r.username === userStore.userInfo.username)"
+                    class="me-tag"
+                  >
+                    (我)
+                  </span>
+                </td>
+                <td class="td-num mono font-bold">
+                  <span class="ac-text">{{ r.solved }} 题</span>
+                </td>
+                <td class="td-num mono">{{ r.penaltyMinutes }} 分钟</td>
+                <td class="td-num mono final-score">
+                  {{ r.totalScore }} / {{ r.fullScore }}
+                </td>
+              </tr>
+              <tr v-if="rankRows.length === 0">
+                <td colspan="5" class="empty-cell muted">暂无全场排行榜数据</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 底部操作导航条：统一全部为高反差黑底直角按钮 -->
+      <footer class="result-footer-bar card">
+        <div class="footer-left">
+          <button class="btn btn-primary" @click="router.push('/exams')">
+            返回考试大厅
+          </button>
+          <button class="btn btn-primary" @click="router.push('/submissions')">
+            查看个人所有提交记录
+          </button>
+        </div>
+        <div class="footer-right">
+          <button class="btn btn-primary" @click="router.push('/questions')">
+            前往题库练习 →
+          </button>
+        </div>
+      </footer>
     </template>
   </div>
 </template>
 
 <style scoped>
-.exam-result {
+.exam-result-page {
   padding-top: 32px;
+  padding-bottom: 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
-.page-title {
-  margin: 28px 0 16px;
-  font-size: 22px;
+
+/* 状态加载 */
+.state-card {
+  padding: 64px 32px;
+  text-align: center;
+  border-radius: 0;
+}
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--line);
+  border-top-color: var(--ink);
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.error-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--danger);
+  margin-bottom: 8px;
+}
+.error-msg {
+  color: var(--ink-secondary);
+  margin-bottom: 24px;
+}
+
+/* 顶部信息头 */
+.result-header {
+  padding: 24px 28px;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--surface);
+}
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 0;
+  transition: all 0.15s ease;
+}
+.btn-back:hover {
+  background: var(--bg);
+  color: var(--ink);
+  border-color: var(--ink);
+}
+.back-icon {
+  width: 14px;
+  height: 14px;
+}
+.report-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--ink);
+  color: #fff;
+  padding: 2px 8px;
+}
+.header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.result-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  color: var(--ink);
+}
+.exam-tag {
+  font-size: 18px;
+  color: var(--ink-tertiary);
   font-weight: 600;
 }
-.section {
-  padding: 16px;
-  margin-bottom: 16px;
+.result-subtitle {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 14px;
+}
+
+/* -------------------------------------------------------------
+   用户的核心标志性设计：4 大指标直角大方块矩阵 (Hero Stat Bento)
+   ------------------------------------------------------------- */
+.stat-squares-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.stat-square {
+  padding: 20px 24px;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.stat-square-head {
+  font-size: 12px;
+  color: var(--ink-tertiary);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.stat-square-body {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.stat-num {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1;
+}
+.score-num { color: var(--ink); }
+.rank-num { color: #0288d1; }
+.ac-num { color: var(--success); }
+.penalty-num { color: #e65100; }
+.stat-unit {
+  font-size: 14px;
+  color: var(--ink-tertiary);
+  font-weight: 500;
+}
+.stat-square-foot {
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+/* 试题明细区域 */
+.breakdown-section {
+  border-radius: 0;
+  background: var(--surface);
+  overflow: hidden;
+}
+.section-head {
+  padding: 18px 24px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
 }
 .section-title {
-  margin: 0 0 12px;
+  margin: 0 0 4px;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 800;
+  color: var(--ink);
 }
-.status-badge {
-  display: inline-block;
-  min-width: 44px;
-  padding: 2px 10px;
-  border-radius: var(--pill);
-  color: #fff;
+.section-desc {
   font-size: 12px;
-  font-weight: 600;
-  text-align: center;
+  color: var(--ink-tertiary);
 }
-.status-badge.ac {
-  background: var(--success);
+
+.breakdown-list {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
-.status-badge.wa {
-  background: var(--danger);
+.question-result-card {
+  border-radius: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  transition: all 0.15s ease;
 }
-.status-badge.tle {
-  background: #000;
+.question-result-card:hover {
+  border-color: var(--ink);
 }
-.status-badge.mle {
-  background: #f57c00;
+.q-card-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  cursor: pointer;
 }
-.status-badge.re {
-  background: #9c27b0;
+
+/* 核心直角方块：64×64px 评测状态方块 */
+.q-status-square {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 0;
+  color: #fff;
+  border: 1px solid transparent;
 }
-.status-badge.ce,
-.status-badge.se {
-  background: #607d8b;
+.q-status-square.ac { background: var(--success); }
+.q-status-square.wa { background: var(--danger); }
+.q-status-square.tle { background: #000; }
+.q-status-square.re { background: #9c27b0; }
+.q-status-square.pending { background: #78909c; }
+.q-status-square.unanswered { background: #64748b; }
+.sq-abbr {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1;
 }
-.status-badge.run {
-  background: #9e9e9e;
+.sq-score {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.9;
+  line-height: 1;
 }
-.rank-no {
+
+.q-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.q-card-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.q-seq {
+  font-size: 13px;
+  color: var(--ink-tertiary);
   font-weight: 700;
+}
+.q-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.q-card-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+.meta-score strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.q-card-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-tertiary);
+  flex-shrink: 0;
+}
+.toggle-arrow {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.2s ease;
+}
+.toggle-arrow.rotate {
+  transform: rotate(180deg);
+}
+
+.q-card-drawer {
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  padding: 16px 20px;
+}
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.drawer-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-secondary);
+}
+.btn-copy {
+  background: none;
+  border: 1px solid var(--line);
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 0;
+}
+.drawer-code {
+  margin: 0;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--ink);
+}
+
+/* 天梯排行榜 */
+.ranking-section {
+  border-radius: 0;
+  background: var(--surface);
+  overflow: hidden;
+}
+.table-container {
+  overflow-x: auto;
+}
+.rank-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.rank-table th {
+  text-align: left;
+  padding: 12px 18px;
+  color: var(--ink-tertiary);
+  font-weight: 600;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.rank-table td {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.th-rank, .td-rank { width: 70px; }
+.th-num, .td-num { text-align: right; }
+
+.rank-row.is-me {
+  background: #f8faff;
+  box-shadow: inset 3px 0 0 #0288d1;
+}
+.rank-square-badge {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 0;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.rank-square-badge.rank-1 { background: #000; color: #fff; border-color: #000; }
+.rank-square-badge.rank-2 { background: #333; color: #fff; border-color: #333; }
+.rank-square-badge.rank-3 { background: #666; color: #fff; border-color: #666; }
+
+.username-text {
+  font-weight: 600;
+  color: var(--ink);
+}
+.me-tag {
+  font-size: 11px;
+  color: #0288d1;
+  font-weight: 700;
+  margin-left: 6px;
+}
+.ac-text {
+  color: var(--success);
+  font-weight: 700;
+}
+.final-score {
+  font-weight: 700;
+  color: var(--ink);
+  font-size: 14px;
+}
+.empty-cell {
+  text-align: center;
+  padding: 32px;
+}
+
+/* 底部操作条 */
+.result-footer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-radius: 0;
+  background: var(--surface);
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .stat-squares-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .stat-squares-grid {
+    grid-template-columns: 1fr;
+  }
+  .result-footer-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .footer-left,
+  .footer-right {
+    width: 100%;
+  }
+  .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
 }
 </style>

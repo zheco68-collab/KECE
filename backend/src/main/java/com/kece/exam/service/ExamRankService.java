@@ -58,14 +58,26 @@ public class ExamRankService {
             latestDb.put(key(s.getUserId(), s.getQuestionId()), s);
         }
 
+        List<ExamQuestion> examQuestions = examQuestionMapper.findByExamId(examId);
+        int examTotalFullScore =
+                examQuestions.stream()
+                        .mapToInt(q -> q.getScore() == null ? 0 : q.getScore())
+                        .sum();
+
         Map<Long, RankAgg> aggByUser = new LinkedHashMap<>();
         for (ExamSubmission row : answers) {
             ExamQuestion eq = examQuestionMapper.findById(row.getExamQuestionId());
             if (eq == null) {
                 continue;
             }
-            RankAgg agg = aggByUser.computeIfAbsent(row.getUserId(), k -> new RankAgg());
-            agg.fullScore += eq.getScore();
+            RankAgg agg =
+                    aggByUser.computeIfAbsent(
+                            row.getUserId(),
+                            k -> {
+                                RankAgg a = new RankAgg();
+                                a.fullScore = examTotalFullScore;
+                                return a;
+                            });
             agg.finished++;
             String status = row.getStatus();
             Integer score = row.getScore();
@@ -73,21 +85,19 @@ public class ExamRankService {
                 Submission s = latestCode.get(key(row.getUserId(), eq.getQuestionId()));
                 if (s != null) {
                     status = s.getStatus();
-                    score = s.getScore();
+                    score = scaleScore(s.getScore(), eq.getScore());
                 }
             } else if ("DB".equals(eq.getQuestionType())) {
                 DbSubmission s = latestDb.get(key(row.getUserId(), eq.getQuestionId()));
                 if (s != null) {
                     status = s.getStatus();
-                    score = s.getScore();
+                    score = scaleScore(s.getScore(), eq.getScore());
                 }
             }
             if (isAccepted(status)) {
                 agg.solved++;
-                agg.totalScore += score == null ? 0 : score;
-            } else {
-                agg.totalScore += score == null ? 0 : score;
             }
+            agg.totalScore += score == null ? 0 : score;
         }
 
         // ACM 罚时：代码/数据库题按 contest 内逐条计算（首 AC 分钟数 + 20×错误次数）
@@ -151,6 +161,13 @@ public class ExamRankService {
 
     private boolean isAccepted(String status) {
         return "ACCEPTED".equals(status);
+    }
+
+    private Integer scaleScore(Integer judgeScore, Integer fullScore) {
+        if (judgeScore == null || fullScore == null) {
+            return null;
+        }
+        return (int) Math.round((double) judgeScore * fullScore / 100.0);
     }
 
     private String key(Long userId, Long questionId) {

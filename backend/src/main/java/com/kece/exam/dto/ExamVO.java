@@ -35,6 +35,9 @@ public class ExamVO {
     /** 考试状态：UPCOMING/ONGOING/ENDED/CANCELLED。 */
     private String sessionStatus;
 
+    /** 当前登录用户是否已提交交卷。 */
+    private Boolean submitted;
+
     private Long createdBy;
 
     /** 题目快照条目（列表接口为空，详情接口携带）。 */
