@@ -35,8 +35,27 @@ public class QuestionService {
         int offset = (safePage - 1) * safeSize;
         Integer status = (all && isPrivileged()) ? null : 1;
         List<Question> questions =
-                questionMapper.findPage(keyword, difficulty, status, offset, safeSize);
-        long total = questionMapper.count(keyword, difficulty, status);
+                questionMapper.findPage(keyword, difficulty, status, null, offset, safeSize);
+        long total = questionMapper.count(keyword, difficulty, status, null);
+        return new PageResult<>(
+                questions.stream().map(this::toVO).toList(), total, safePage, safeSize);
+    }
+
+    /** 后台算法题列表：ADMIN 可按 createdBy 筛选，非 ADMIN 仅见自己出的题。 */
+    public PageResult<QuestionVO> listAdmin(
+            String keyword, String difficulty, Integer status, Long createdBy, int page, int size) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        int offset = (safePage - 1) * safeSize;
+        Long targetCreatedBy = createdBy;
+        AuthUser user = AuthContextHolder.get();
+        if (user == null || !user.hasRole(Role.ADMIN)) {
+            targetCreatedBy = AuthContextHolder.currentUserId();
+        }
+        List<Question> questions =
+                questionMapper.findPage(
+                        keyword, difficulty, status, targetCreatedBy, offset, safeSize);
+        long total = questionMapper.count(keyword, difficulty, status, targetCreatedBy);
         return new PageResult<>(
                 questions.stream().map(this::toVO).toList(), total, safePage, safeSize);
     }

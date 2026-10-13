@@ -26,6 +26,10 @@ public class ObjectiveQuestion {
 
     private Integer score;
     private Long createdBy;
+
+    /** 状态：1公开 0私有。 */
+    private Integer status;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

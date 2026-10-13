@@ -56,6 +56,7 @@ public class ObjectiveQuestionSeeder {
         question.setMatchType(seed.matchType());
         question.setScore(seed.score());
         question.setCreatedBy(authorId);
+        question.setStatus(1); // 示例题一律公开
         questionMapper.insert(question);
         return 1;
     }

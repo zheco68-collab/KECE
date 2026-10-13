@@ -32,20 +32,47 @@ public class ObjectiveQuestionService {
     private final ObjectiveGrader grader;
     private final ObjectMapper objectMapper;
 
+    /** 做题侧公开列表：只显示公开题。 */
     public PageResult<ObjectiveQuestionVO> list(String type, String keyword, int page, int size) {
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(size, 1), 100);
         int offset = (safePage - 1) * safeSize;
-        List<ObjectiveQuestion> items = mapper.findPage(type, keyword, offset, safeSize);
-        long total = mapper.count(type, keyword);
-        boolean privileged = isPrivileged();
+        List<ObjectiveQuestion> items = mapper.findPage(type, keyword, 1, null, offset, safeSize);
+        long total = mapper.count(type, keyword, 1, null);
         return new PageResult<>(
-                items.stream().map(q -> toVO(q, privileged)).toList(), total, safePage, safeSize);
+                items.stream().map(q -> toVO(q, isPrivileged(q))).toList(),
+                total,
+                safePage,
+                safeSize);
     }
 
     public ObjectiveQuestionVO detail(Long id) {
         ObjectiveQuestion question = getQuestionOrThrow(id);
-        return toVO(question, isPrivileged());
+        if (question.getStatus() != null && question.getStatus() != 1 && !canManage(question)) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "题目不存在");
+        }
+        return toVO(question, isPrivileged(question));
+    }
+
+    /** 后台客观题列表：ADMIN 可按 createdBy 筛选，其余角色只能看到自己出的题。 */
+    public PageResult<ObjectiveQuestionVO> listAdmin(
+            String type, String keyword, Integer status, Long createdBy, int page, int size) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        int offset = (safePage - 1) * safeSize;
+        AuthUser user = AuthContextHolder.get();
+        Long targetCreatedBy =
+                (user != null && user.hasRole(Role.ADMIN))
+                        ? createdBy
+                        : (user == null ? null : user.getId());
+        List<ObjectiveQuestion> items =
+                mapper.findPage(type, keyword, status, targetCreatedBy, offset, safeSize);
+        long total = mapper.count(type, keyword, status, targetCreatedBy);
+        return new PageResult<>(
+                items.stream().map(q -> toVO(q, isPrivileged(q))).toList(),
+                total,
+                safePage,
+                safeSize);
     }
 
     @Transactional
@@ -136,9 +163,27 @@ public class ObjectiveQuestionService {
         throw new BusinessException(ResultCode.FORBIDDEN);
     }
 
-    private boolean isPrivileged() {
+    /** 答案可见性：管理员或出题人本人。 */
+    private boolean isPrivileged(ObjectiveQuestion question) {
         AuthUser user = AuthContextHolder.get();
-        return user != null && (user.hasRole(Role.TEACHER) || user.hasRole(Role.ADMIN));
+        if (user == null) {
+            return false;
+        }
+        if (user.hasRole(Role.ADMIN)) {
+            return true;
+        }
+        return question.getCreatedBy().equals(user.getId());
+    }
+
+    private boolean canManage(ObjectiveQuestion question) {
+        AuthUser user = AuthContextHolder.get();
+        if (user == null) {
+            return false;
+        }
+        if (user.hasRole(Role.ADMIN)) {
+            return true;
+        }
+        return question.getCreatedBy().equals(user.getId());
     }
 
     private void applyRequest(ObjectiveQuestion question, ObjectiveQuestionRequest request) {
@@ -148,6 +193,7 @@ public class ObjectiveQuestionService {
         question.setAnswer(request.getAnswer());
         question.setMatchType(request.getMatchType() == null ? "EXACT" : request.getMatchType());
         question.setScore(request.getScore() == null ? 5 : request.getScore());
+        question.setStatus(request.getStatus() == null ? 1 : request.getStatus());
     }
 
     private ObjectiveQuestionVO toVO(ObjectiveQuestion question, boolean privileged) {
@@ -160,6 +206,7 @@ public class ObjectiveQuestionService {
                 .matchType(question.getMatchType())
                 .score(question.getScore())
                 .createdBy(question.getCreatedBy())
+                .status(question.getStatus())
                 .createdAt(question.getCreatedAt())
                 .updatedAt(question.getUpdatedAt())
                 .build();

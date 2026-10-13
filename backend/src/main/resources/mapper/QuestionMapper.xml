@@ -21,6 +21,7 @@
             <if test="status != null">status = #{status}</if>
             <if test="difficulty != null and difficulty != ''">AND difficulty = #{difficulty}</if>
             <if test="keyword != null and keyword != ''">AND title LIKE CONCAT('%', #{keyword}, '%')</if>
+            <if test="createdBy != null">AND created_by = #{createdBy}</if>
         </where>
     </sql>
 

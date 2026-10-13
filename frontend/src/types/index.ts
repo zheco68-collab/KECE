@@ -54,6 +54,7 @@ export interface ObjectiveQuestion {
   answer: string | null
   matchType: MatchType | null
   score: number
+  status: number
   createdBy: number
   createdAt: string
   updatedAt: string

@@ -23,8 +23,14 @@ public interface ObjectiveQuestionMapper {
     List<ObjectiveQuestion> findPage(
             @Param("type") String type,
             @Param("keyword") String keyword,
+            @Param("status") Integer status,
+            @Param("createdBy") Long createdBy,
             @Param("offset") int offset,
             @Param("size") int size);
 
-    long count(@Param("type") String type, @Param("keyword") String keyword);
+    long count(
+            @Param("type") String type,
+            @Param("keyword") String keyword,
+            @Param("status") Integer status,
+            @Param("createdBy") Long createdBy);
 }

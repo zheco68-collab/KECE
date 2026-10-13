@@ -21,11 +21,13 @@ public interface QuestionMapper {
             @Param("keyword") String keyword,
             @Param("difficulty") String difficulty,
             @Param("status") Integer status,
+            @Param("createdBy") Long createdBy,
             @Param("offset") int offset,
             @Param("size") int size);
 
     long count(
             @Param("keyword") String keyword,
             @Param("difficulty") String difficulty,
-            @Param("status") Integer status);
+            @Param("status") Integer status,
+            @Param("createdBy") Long createdBy);
 }

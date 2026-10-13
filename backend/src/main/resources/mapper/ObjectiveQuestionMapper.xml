@@ -11,6 +11,7 @@
         <result column="match_type" property="matchType"/>
         <result column="score" property="score"/>
         <result column="created_by" property="createdBy"/>
+        <result column="status" property="status"/>
         <result column="created_at" property="createdAt"/>
         <result column="updated_at" property="updatedAt"/>
     </resultMap>
@@ -19,6 +20,8 @@
         <where>
             <if test="type != null and type != ''">type = #{type}</if>
             <if test="keyword != null and keyword != ''">AND content LIKE CONCAT('%', #{keyword}, '%')</if>
+            <if test="status != null">AND status = #{status}</if>
+            <if test="createdBy != null">AND created_by = #{createdBy}</if>
         </where>
     </sql>
 
@@ -43,8 +46,8 @@
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO `objective_question` (type, content, options, answer, match_type, score, created_by)
-        VALUES (#{type}, #{content}, #{options}, #{answer}, #{matchType}, #{score}, #{createdBy})
+        INSERT INTO `objective_question` (type, content, options, answer, match_type, score, created_by, status)
+        VALUES (#{type}, #{content}, #{options}, #{answer}, #{matchType}, #{score}, #{createdBy}, #{status})
     </insert>
 
     <update id="update">
@@ -56,6 +59,7 @@
             <if test="answer != null">answer = #{answer},</if>
             <if test="matchType != null">match_type = #{matchType},</if>
             <if test="score != null">score = #{score},</if>
+            <if test="status != null">status = #{status},</if>
         </set>
         WHERE id = #{id}
     </update>

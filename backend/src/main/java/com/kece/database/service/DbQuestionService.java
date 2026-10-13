@@ -34,14 +34,33 @@ public class DbQuestionService {
         int safeSize = Math.min(Math.max(size, 1), 100);
         int offset = (safePage - 1) * safeSize;
         Integer status = (all && isPrivileged()) ? null : 1;
-        List<DbQuestion> items = questionMapper.findPage(type, keyword, status, offset, safeSize);
-        long total = questionMapper.count(type, keyword, status);
+        List<DbQuestion> items =
+                questionMapper.findPage(type, keyword, status, null, offset, safeSize);
+        long total = questionMapper.count(type, keyword, status, null);
         boolean privileged = isPrivileged();
         return new PageResult<>(
                 items.stream().map(q -> toVO(q, privileged, false)).toList(),
                 total,
                 safePage,
                 safeSize);
+    }
+
+    /** 后台数据库题列表：ADMIN 可按 createdBy 筛选，非 ADMIN 仅见自己出的题。 */
+    public PageResult<DbQuestionVO> listAdmin(
+            String type, String keyword, Integer status, Long createdBy, int page, int size) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        int offset = (safePage - 1) * safeSize;
+        Long targetCreatedBy = createdBy;
+        AuthUser user = AuthContextHolder.get();
+        if (user == null || !user.hasRole(Role.ADMIN)) {
+            targetCreatedBy = AuthContextHolder.currentUserId();
+        }
+        List<DbQuestion> items =
+                questionMapper.findPage(type, keyword, status, targetCreatedBy, offset, safeSize);
+        long total = questionMapper.count(type, keyword, status, targetCreatedBy);
+        return new PageResult<>(
+                items.stream().map(q -> toVO(q, true, false)).toList(), total, safePage, safeSize);
     }
 
     public DbQuestionVO detail(Long id) {

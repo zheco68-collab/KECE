@@ -1,8 +1,10 @@
 import { http } from './request'
 import type {
   AnswerResult,
+  MatchType,
   ObjectiveQuestion,
   ObjectiveSubmissionRecord,
+  ObjectiveType,
   PageResult,
 } from '@/types'
 
@@ -20,6 +22,19 @@ export interface ObjectiveSubmissionListParams {
   size?: number
 }
 
+/** 客观题创建/更新请求。 */
+export interface ObjectiveQuestionWriteRequest {
+  type: ObjectiveType
+  content: string
+  /** 选项（单选/多选）。 */
+  options?: string[]
+  answer: string
+  matchType?: MatchType
+  score?: number
+  /** 状态：1 公开 0 私有。 */
+  status?: number
+}
+
 export const objectiveApi = {
   list: (params: ObjectiveListParams) =>
     http.get<PageResult<ObjectiveQuestion>>('/objective-questions', { params }),
@@ -30,4 +45,9 @@ export const objectiveApi = {
   solved: () => http.get<number[]>('/objective-submissions/solved'),
   listSubmissions: (params?: ObjectiveSubmissionListParams) =>
     http.get<PageResult<ObjectiveSubmissionRecord>>('/objective-submissions', { params }),
+  create: (body: ObjectiveQuestionWriteRequest) =>
+    http.post<ObjectiveQuestion>('/objective-questions', body),
+  update: (id: number | string, body: ObjectiveQuestionWriteRequest) =>
+    http.put<ObjectiveQuestion>(`/objective-questions/${id}`, body),
+  remove: (id: number | string) => http.delete<void>(`/objective-questions/${id}`),
 }

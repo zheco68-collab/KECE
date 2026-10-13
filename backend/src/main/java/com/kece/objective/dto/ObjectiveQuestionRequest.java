@@ -27,4 +27,9 @@ public class ObjectiveQuestionRequest {
     @Min(value = 1, message = "分值不能小于 1")
     @Max(value = 100, message = "分值不能大于 100")
     private Integer score = 5;
+
+    /** 状态：1 公开 0 私有。 */
+    @Min(value = 0, message = "状态取值只能为 0 或 1")
+    @Max(value = 1, message = "状态取值只能为 0 或 1")
+    private Integer status = 1;
 }
