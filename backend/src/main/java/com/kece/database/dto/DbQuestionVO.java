@@ -15,12 +15,16 @@ public class DbQuestionVO {
     private String description;
     private String dialect;
     private String type;
+
     /** 建表语句对所有人可见：用户需要照着它写 SQL。 */
     private String schemaSql;
+
     /** 标准答案，仅出题人/管理员可见，其余为 null。 */
     private String referenceSql;
+
     /** DML 校验查询，仅出题人/管理员可见，其余为 null。 */
     private String verifySql;
+
     private boolean orderSensitive;
     private Integer status;
     private Long createdBy;

@@ -28,7 +28,8 @@ public class DbQuestionService {
     private final DbQuestionMapper questionMapper;
     private final DbTestCaseMapper testCaseMapper;
 
-    public PageResult<DbQuestionVO> list(String type, String keyword, int page, int size, boolean all) {
+    public PageResult<DbQuestionVO> list(
+            String type, String keyword, int page, int size, boolean all) {
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(size, 1), 100);
         int offset = (safePage - 1) * safeSize;
@@ -37,7 +38,10 @@ public class DbQuestionService {
         long total = questionMapper.count(type, keyword, status);
         boolean privileged = isPrivileged();
         return new PageResult<>(
-                items.stream().map(q -> toVO(q, privileged, false)).toList(), total, safePage, safeSize);
+                items.stream().map(q -> toVO(q, privileged, false)).toList(),
+                total,
+                safePage,
+                safeSize);
     }
 
     public DbQuestionVO detail(Long id) {
@@ -152,7 +156,8 @@ public class DbQuestionService {
                 .schemaSql(question.getSchemaSql())
                 .referenceSql(privileged ? question.getReferenceSql() : null)
                 .verifySql(privileged ? question.getVerifySql() : null)
-                .orderSensitive(question.getOrderSensitive() != null && question.getOrderSensitive() == 1)
+                .orderSensitive(
+                        question.getOrderSensitive() != null && question.getOrderSensitive() == 1)
                 .status(question.getStatus())
                 .createdBy(question.getCreatedBy())
                 .testCases(caseVOs)
@@ -164,12 +169,13 @@ public class DbQuestionService {
     private List<DbTestCaseVO> buildCaseVOs(Long questionId) {
         List<DbTestCaseVO> result = new ArrayList<>();
         for (DbTestCase tc : testCaseMapper.findByQuestionId(questionId)) {
-            result.add(DbTestCaseVO.builder()
-                    .id(tc.getId())
-                    .caseOrder(tc.getCaseOrder())
-                    .seedSql(tc.getSeedSql())
-                    .isSample(tc.getIsSample() == null ? 0 : tc.getIsSample())
-                    .build());
+            result.add(
+                    DbTestCaseVO.builder()
+                            .id(tc.getId())
+                            .caseOrder(tc.getCaseOrder())
+                            .seedSql(tc.getSeedSql())
+                            .isSample(tc.getIsSample() == null ? 0 : tc.getIsSample())
+                            .build());
         }
         return result;
     }

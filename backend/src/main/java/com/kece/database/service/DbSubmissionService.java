@@ -104,8 +104,10 @@ public class DbSubmissionService {
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(size, 1), 100);
         int offset = (safePage - 1) * safeSize;
-        String statusFilter = (status == null || status.isBlank()) ? null : status.trim().toUpperCase();
-        List<DbSubmissionListVO> list = submissionMapper.findPage(userId, statusFilter, offset, safeSize);
+        String statusFilter =
+                (status == null || status.isBlank()) ? null : status.trim().toUpperCase();
+        List<DbSubmissionListVO> list =
+                submissionMapper.findPage(userId, statusFilter, offset, safeSize);
         long total = submissionMapper.count(userId, statusFilter);
         return new PageResult<>(list, total, safePage, safeSize);
     }
@@ -146,8 +148,7 @@ public class DbSubmissionService {
     /**
      * 隐藏逐用例的期望/实际输出，避免答题者由比对结果反推隐藏测试点的数据与答案。
      *
-     * <p>样例测试点的数据本就随题面公开（题目详情的「样例数据」），因此保留其比对结果供自助排查；
-     * 非样例测试点一律置空。管理员不受限。
+     * <p>样例测试点的数据本就随题面公开（题目详情的「样例数据」），因此保留其比对结果供自助排查； 非样例测试点一律置空。管理员不受限。
      */
     private SubmissionVO sanitize(SubmissionVO vo, AuthUser user) {
         if (vo == null || user.hasRole(Role.ADMIN) || vo.getResult() == null) {
@@ -158,19 +159,21 @@ public class DbSubmissionService {
             return vo;
         }
         Set<Long> sampleCaseIds = findSampleCaseIds(vo.getSubmissionId());
-        report.forEach(c -> {
-            if (sampleCaseIds.contains(c.getCaseId())) {
-                return;
-            }
-            c.setExpectedOutput(null);
-            c.setActualOutput(null);
-        });
+        report.forEach(
+                c -> {
+                    if (sampleCaseIds.contains(c.getCaseId())) {
+                        return;
+                    }
+                    c.setExpectedOutput(null);
+                    c.setActualOutput(null);
+                });
         return vo;
     }
 
     /** 该提交所属题目的样例测试点 id；题目已删除或查不到时返回空集合（等价于全部隐藏）。 */
     private Set<Long> findSampleCaseIds(Long submissionId) {
-        DbSubmission submission = submissionId == null ? null : submissionMapper.findById(submissionId);
+        DbSubmission submission =
+                submissionId == null ? null : submissionMapper.findById(submissionId);
         if (submission == null) {
             return Set.of();
         }
@@ -229,7 +232,9 @@ public class DbSubmissionService {
         task.put("schemaSql", question.getSchemaSql());
         task.put("referenceSql", question.getReferenceSql());
         task.put("verifySql", question.getVerifySql());
-        task.put("orderSensitive", question.getOrderSensitive() != null && question.getOrderSensitive() == 1);
+        task.put(
+                "orderSensitive",
+                question.getOrderSensitive() != null && question.getOrderSensitive() == 1);
         task.put("codeContent", Map.of("answer.sql", sql));
         task.put("timeLimitMs", SQL_TIME_LIMIT_MS);
         List<Map<String, Object>> cases =

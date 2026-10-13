@@ -25,8 +25,8 @@ import org.springframework.test.web.servlet.MvcResult;
 /**
  * 数据库 OJ 接口集成测试。
  *
- * <p>覆盖题目 CRUD、标准答案脱敏（{@code referenceSql}/{@code verifySql} 仅出题人可见）、提交入队与「人人只看自己」的记录页。
- * 判题本身由 Go 判题机执行，此处不启动判题机，提交停留在 PENDING，因此只断言入队任务与记录归属，不断言评测结果。
+ * <p>覆盖题目 CRUD、标准答案脱敏（{@code referenceSql}/{@code verifySql} 仅出题人可见）、提交入队与「人人只看自己」的记录页。 判题本身由 Go
+ * 判题机执行，此处不启动判题机，提交停留在 PENDING，因此只断言入队任务与记录归属，不断言评测结果。
  */
 class DbQuestionIntegrationTest extends AbstractIntegrationTest {
 
@@ -41,9 +41,11 @@ class DbQuestionIntegrationTest extends AbstractIntegrationTest {
     private static final String SELECT_REF = "SELECT id, name FROM emp WHERE dept = 'RD'";
     private static final String DML_REF = "UPDATE emp SET salary = salary * 1.1 WHERE dept = 'RD'";
     private static final String DML_VERIFY = "SELECT id, name, salary FROM emp ORDER BY id";
+
     /** 判题机写回的结果集 JSON（比对展示用，内容不必真实）。 */
     private static final String EXPECTED_RESULT_SET =
             "{\"columns\":[{\"name\":\"id\",\"type\":\"INT\"}],\"rows\":[[\"1\"],[\"2\"]]}";
+
     private static final String ACTUAL_RESULT_SET =
             "{\"columns\":[{\"name\":\"id\",\"type\":\"INT\"}],\"rows\":[[\"1\"],[\"3\"]]}";
 
@@ -497,12 +499,12 @@ class DbQuestionIntegrationTest extends AbstractIntegrationTest {
         long hiddenCaseId = cases.get(1).path("id").asLong();
 
         String student = registerStudent();
-        long submissionId =
-                submit(id, student, "SELECT id FROM emp").path("submissionId").asLong();
+        long submissionId = submit(id, student, "SELECT id FROM emp").path("submissionId").asLong();
         cacheTerminalResult(submissionId, sampleCaseId, hiddenCaseId);
 
         // 样例测试点的数据本就随题面公开，比对结果保留，供答题者自助排查。
-        JsonNode report = getSubmission(submissionId, student).path("result").path("testCasesReport");
+        JsonNode report =
+                getSubmission(submissionId, student).path("result").path("testCasesReport");
         assertThat(report.get(0).path("caseId").asLong()).isEqualTo(sampleCaseId);
         assertThat(report.get(0).path("expectedOutput").asText()).isEqualTo(EXPECTED_RESULT_SET);
         assertThat(report.get(0).path("actualOutput").asText()).isEqualTo(ACTUAL_RESULT_SET);
@@ -556,8 +558,7 @@ class DbQuestionIntegrationTest extends AbstractIntegrationTest {
         String token = teacherToken();
         long id = createQuestion(token, selectQuestion(uniqueTitle("own2")));
         String student = registerStudent();
-        long submissionId =
-                submit(id, student, "SELECT id FROM emp").path("submissionId").asLong();
+        long submissionId = submit(id, student, "SELECT id FROM emp").path("submissionId").asLong();
 
         MvcResult asOwner =
                 mockMvc.perform(

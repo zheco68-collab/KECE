@@ -112,8 +112,10 @@ public class SubmissionService {
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(size, 1), 100);
         int offset = (safePage - 1) * safeSize;
-        String statusFilter = (status == null || status.isBlank()) ? null : status.trim().toUpperCase();
-        List<SubmissionListVO> list = submissionMapper.findPage(userId, statusFilter, offset, safeSize);
+        String statusFilter =
+                (status == null || status.isBlank()) ? null : status.trim().toUpperCase();
+        List<SubmissionListVO> list =
+                submissionMapper.findPage(userId, statusFilter, offset, safeSize);
         long total = submissionMapper.count(userId, statusFilter);
         return new PageResult<>(list, total, safePage, safeSize);
     }
@@ -158,10 +160,11 @@ public class SubmissionService {
         }
         var report = vo.getResult().getTestCasesReport();
         if (report != null) {
-            report.forEach(c -> {
-                c.setExpectedOutput(null);
-                c.setActualOutput(null);
-            });
+            report.forEach(
+                    c -> {
+                        c.setExpectedOutput(null);
+                        c.setActualOutput(null);
+                    });
         }
         return vo;
     }
