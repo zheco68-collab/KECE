@@ -1,3 +1,5 @@
+![背景](./演示图/Snipaste_2026-10-14_14-34-59.png)
+
 # KECE — 综合编程与全真技术技能评测平台
 
 [![Vue 3](https://img.shields.io/badge/Frontend-Vue%203%20%7C%20TypeScript%20%7C%20Vite-42b883?style=flat-square)](https://vuejs.org/)[![Spring Boot](https://img.shields.io/badge/Backend-Spring%20Boot%203%20%7C%20Java%2017-6db33f?style=flat-square)](https://spring.io/projects/spring-boot)[![Go Judger](https://img.shields.io/badge/Judger-Go%20%7C%20Docker%20Sandbox-00add8?style=flat-square)](https://golang.org/)[![Database](https://img.shields.io/badge/Database-MySQL%208%20%7C%20Redis%207-00758f?style=flat-square)](https://www.mysql.com/)
