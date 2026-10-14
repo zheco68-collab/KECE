@@ -1,9 +1,6 @@
 # KECE — 综合编程与全真技术技能评测平台
 
-[![Vue 3](https://img.shields.io/badge/Frontend-Vue%203%20%7C%20TypeScript%20%7C%20Vite-42b883?style=flat-square)](https://vuejs.org/)
-[![Spring Boot](https://img.shields.io/badge/Backend-Spring%20Boot%203%20%7C%20Java%2017-6db33f?style=flat-square)](https://spring.io/projects/spring-boot)
-[![Go Judger](https://img.shields.io/badge/Judger-Go%20%7C%20Docker%20Sandbox-00add8?style=flat-square)](https://golang.org/)
-[![Database](https://img.shields.io/badge/Database-MySQL%208%20%7C%20Redis%207-00758f?style=flat-square)](https://www.mysql.com/)
+[![Vue 3](https://img.shields.io/badge/Frontend-Vue%203%20%7C%20TypeScript%20%7C%20Vite-42b883?style=flat-square)](https://vuejs.org/)[![Spring Boot](https://img.shields.io/badge/Backend-Spring%20Boot%203%20%7C%20Java%2017-6db33f?style=flat-square)](https://spring.io/projects/spring-boot)[![Go Judger](https://img.shields.io/badge/Judger-Go%20%7C%20Docker%20Sandbox-00add8?style=flat-square)](https://golang.org/)[![Database](https://img.shields.io/badge/Database-MySQL%208%20%7C%20Redis%207-00758f?style=flat-square)](https://www.mysql.com/)
 
 > **全真技术工程机试与在线评测平台**，集 **算法 OJ**、**数据库 SQL OJ**、**客观题自动评测** 与 **全流程组卷考试/竞赛系统** 于一体。服务于企业技术招聘笔试、高校实验教学及专业刷题竞技场景。
 
@@ -17,7 +14,7 @@ KECE 采用**纯粹极简的硬朗直角（0-Radius）与 Bento Grid 工业美�
 * 左侧 36×36px 直角题号导轨，双栏分屏设计（左题面规格/右 Monaco 编辑器与直角字母选项矩阵）。
 * 顶部配备等宽数码倒计时表盘、实时答题进度感知与切屏反作弊上报监控。
 
-![全真隔离考场工作台](./演示图/Snipaste_2026-10-14_00-14-26.png)
+![考试归档战报与 Bento 指标方块](./演示图/Snipaste_2026-10-14_14-11-40.png)
 
 ---
 
@@ -25,7 +22,7 @@ KECE 采用**纯粹极简的硬朗直角（0-Radius）与 Bento Grid 工业美�
 * 考卷提交后即刻生成永久锁定归档战报。顶部采用标志性 **四大指标 Bento 直角大方块**（综合总分、全场名次、AC 通过题数、ACM 罚时）。
 * 下方聚合全场实时天梯榜，配备冠亚季军纯黑、深灰、中灰直角方块勋章。
 
-![考试归档战报与 Bento 指标方块](./演示图/Snipaste_2026-10-14_00-15-49.png)
+![逐题评测状态方块与作答快照](./演示图/Snipaste_2026-10-14_14-13-57.png)
 
 ---
 
@@ -33,7 +30,7 @@ KECE 采用**纯粹极简的硬朗直角（0-Radius）与 Bento Grid 工业美�
 * 每道试题配备 **64×64px 硬朗直角评测状态方块**（`AC` 翡翠绿、`WA` 猩红、`未答` 石板灰高反差），直观呈现得分折算。
 * 点击卡片即可丝滑展开**原始提交内容快照抽屉**，支持一键代码复制与回溯。
 
-![逐题评测状态方块与作答快照](./演示图/exam_breakdown.png)
+![逐题评测状态方块与作答快照](./演示图/Snipaste_2026-10-14_14-15-41.png)
 
 ---
 
@@ -42,32 +39,44 @@ KECE 采用**纯粹极简的硬朗直角（0-Radius）与 Bento Grid 工业美�
 * 考生交卷后「进入考场」按钮自动**变灰禁用为 `[已交卷]`**，同步浮现 `[查看战报 →]`。
 * 在考试卡片外部可直接点击 **`[实时排名]`**，原地呼出高反差 Bento 实时天梯榜弹窗，支持 10 秒静默轮询。
 
-![考试大厅卡片与交卷状态](./演示图/Snipaste_2026-10-14_00-17-28.png)
+![考试大厅卡片与交卷状态](./演示图/Snipaste_2026-10-14_14-16-45.png)
 
 ---
 
 ### 5. 算法编程：作答工作台与测试点评测结果
-* 题目规格详述与约束条件，右侧内置 Monaco 代码编辑器；提交后实时呈现用例评测节点方块与执行耗时/内存。
+* 题目规格详述与约束条件；提交后实时呈现用例评测节点方块与执行耗时/内存。
 
-![算法编程提交工作台](./演示图/Snipaste_2026-10-14_00-18-53.png)
+![算法编程提交工作台](./演示图/Snipaste_2026-10-14_14-18-17.png)
 
-![算法评测结果与用例节点](./演示图/Snipaste_2026-10-14_00-19-38.png)
+
+
+![算法评测结果与用例节点](./演示图/Snipaste_2026-10-14_14-18-52.png)
+
+
+
+![数据库 SQL 作答工作台](./演示图/Snipaste_2026-10-14_00-20-27.png)
 
 ---
 
 ### 6. 数据库 SQL：编写工作台与沙箱对拍结果
 * 支持建表 DDL 一键复制与查看，一次性沙箱对拍结果实时反馈。
 
-![数据库 SQL 作答工作台](./演示图/Snipaste_2026-10-14_00-20-27.png)
-
 ![数据库评测对拍结果](./演示图/Snipaste_2026-10-14_00-21-05.png)
+
+------
+
+![客观题作答工作台](./演示图/Snipaste_2026-10-14_00-21-46.png)
 
 ---
 
 ### 7. 客观题练习：单选/多选/填空与字母方块矩阵
 * 支持 LaTeX 与 Markdown 排版，配备 32×32px 直角字母选项方块矩阵。
 
-![客观题作答工作台](./演示图/Snipaste_2026-10-14_00-21-46.png)
+![客观题作答工作台](./演示图/Snipaste_2026-10-14_14-21-07.png)
+
+
+
+![客观题作答工作台](./演示图/Snipaste_2026-10-14_14-21-31.png)
 
 ---
 
@@ -99,9 +108,15 @@ KECE 采用**纯粹极简的硬朗直角（0-Radius）与 Bento Grid 工业美�
 
 ### 3. 开发者主页与公开档案 (Developer Portfolio)
 - **硬朗个人名片**：128×128px 直角大头像（支持 5MB 本地文件上传与 10MB 请求优雅容错）、个性签名 Slogan 引用框、UID、加入时间及 GitHub 外链直达。
+
 - **52-周代码打卡热力图**：真实沉淀过去 365 天每日 AC 代码提交量，配备「年度 AC 题数」、「当前连击」与「历史最长连击」三大高反差指标方块。
+
 - **全量评测历史整合**：打破传统割裂，主页深度整合算法题代码、数据库 SQL 与客观题作答三大分类，支持状态精确筛选、代码弹窗高亮回溯与一键复制。
+
 - **全平台公开透明（GitHub / LeetCode 范式）**：开放跨用户主页访问（`/profile/:id`），所有用户可互相查看彼此的技术打卡与实战提交，访客视角安全隔离编辑特权。
+
+  ![客观题作答工作台](./演示图/Snipaste_2026-10-14_14-23-01.png)
+
 - **工业化极客交互与纯色体系**：
   - **纯色设计规范**：角色纯色（管理员紫/教师绿/学生黑）、算法难度（简单绿/中等橙/困难红）、数据库题型（SELECT 纯黑/DML 钛金深灰）；
   - **题库列表工业化**：单列富信息卡片（题号、状态圈、时空限制、支持语言）、做题进度仪表板、随机刷题快捷键；
