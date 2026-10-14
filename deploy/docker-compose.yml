@@ -84,6 +84,7 @@ services:
       # 工作目录必须与下方卷挂载路径一致，且与宿主机同路径：
       # 判题机通过宿主机 docker.sock 拉起沙箱，docker run -v 的源路径按宿主机解析。
       WORKSPACE_DIR: /workspace
+      IMAGE_ARKTS: kece-sandbox-arkts:latest
       # 数据库判题连接的独立 MySQL 实例。
       JUDGE_MYSQL_HOST: judge-mysql
       JUDGE_MYSQL_PORT: 3306

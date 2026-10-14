@@ -41,6 +41,7 @@ func main() {
 		ImageCPP:        cfg.Images.CPP,
 		ImageJava:       cfg.Images.Java,
 		ImagePython:     cfg.Images.Python,
+		ImageArkTS:      cfg.Images.ArkTS,
 	}
 	j := judge.New(cfg, q, runner)
 

@@ -13,6 +13,7 @@ type Images struct {
 	CPP    string
 	Java   string
 	Python string
+	ArkTS  string
 }
 
 // Config 为判题机的运行配置。
@@ -76,6 +77,7 @@ func Load() Config {
 			CPP:    getenv("IMAGE_CPP", "gcc:13"),
 			Java:   getenv("IMAGE_JAVA", "eclipse-temurin:17-jdk"),
 			Python: getenv("IMAGE_PYTHON", "python:3.12-slim"),
+			ArkTS:  getenv("IMAGE_ARKTS", "kece-sandbox-arkts:latest"),
 		},
 		SqlQueueKey:        getenv("SQL_QUEUE_KEY", "judge:sql:queue"),
 		SqlProcessingKey:   getenv("SQL_PROCESSING_KEY", "judge:sql:processing"),

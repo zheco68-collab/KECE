@@ -47,7 +47,7 @@ public class SubmissionService {
     private static final String STATUS_KEY_PREFIX = "sub:status:";
     private static final String OWNER_KEY_PREFIX = "sub:owner:";
     private static final long STATUS_TTL_SECONDS = 3600;
-    private static final List<String> SUPPORTED_LANGUAGES = List.of("cpp", "java", "python");
+    private static final List<String> SUPPORTED_LANGUAGES = List.of("cpp", "java", "python", "arkts");
 
     private final SubmissionMapper submissionMapper;
     private final QuestionMapper questionMapper;

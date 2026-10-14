@@ -7,6 +7,7 @@ import '@/assets/monaco/codicon-modifiers.css'
 import 'monaco-editor/languages/definitions/cpp/register.js'
 import 'monaco-editor/languages/definitions/java/register.js'
 import 'monaco-editor/languages/definitions/python/register.js'
+import 'monaco-editor/languages/definitions/typescript/register.js'
 // 数据库 OJ 使用 mysql 方言（含 MySQL 关键字与反引号标识符高亮），语言 id 为 "mysql"。
 import 'monaco-editor/languages/definitions/mysql/register.js'
 import 'monaco-editor/editor/browser/coreCommands.js'

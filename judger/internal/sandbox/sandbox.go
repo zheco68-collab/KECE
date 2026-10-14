@@ -31,6 +31,7 @@ type Runner struct {
 	ImageCPP        string
 	ImageJava       string
 	ImagePython     string
+	ImageArkTS      string
 }
 
 // RunResult 为单次运行的原始结果。
@@ -129,6 +130,8 @@ func (r *Runner) imageFor(lang string) string {
 		return r.ImageJava
 	case "python":
 		return r.ImagePython
+	case "arkts":
+		return r.ImageArkTS
 	default:
 		return ""
 	}
@@ -140,6 +143,8 @@ func compileCommand(lang string) (string, bool) {
 		return "g++ -O2 -std=c++17 -o main main.cpp", true
 	case "java":
 		return "javac Main.java", true
+	case "arkts":
+		return "cp main.ets main.ts 2>/dev/null || true; tsc --target ES2022 --module CommonJS --strict --skipLibCheck --typeRoots /usr/local/lib/node_modules/@types --types node main.ts", true
 	default:
 		return "", false
 	}
@@ -159,6 +164,8 @@ func runCommand(lang, sec string) string {
 		run = fmt.Sprintf("timeout -s KILL %s java -cp /work Main < /work/input.txt", sec)
 	case "python":
 		run = fmt.Sprintf("timeout -s KILL %s python3 /work/main.py < /work/input.txt", sec)
+	case "arkts":
+		run = fmt.Sprintf("timeout -s KILL %s node /work/main.js < /work/input.txt", sec)
 	default:
 		return "exit 1"
 	}

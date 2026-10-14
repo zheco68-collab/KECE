@@ -51,7 +51,7 @@ public class ExamSubmissionService {
 
     private static final String CODE_QUEUE_KEY = "judge:queue";
     private static final String SQL_QUEUE_KEY = "judge:sql:queue";
-    private static final List<String> SUPPORTED_LANGUAGES = List.of("cpp", "java", "python");
+    private static final List<String> SUPPORTED_LANGUAGES = List.of("cpp", "java", "python", "arkts");
 
     private final ExamMapper examMapper;
     private final ExamQuestionMapper examQuestionMapper;

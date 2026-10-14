@@ -198,8 +198,8 @@ onMounted(() => {
             <input v-model.number="form.memoryLimit" class="input" type="number" min="1" max="4096" />
           </FormField>
         </div>
-        <FormField label="支持语言" hint="逗号分隔，如 cpp,java,python">
-          <input v-model="form.languages" class="input" placeholder="cpp,java,python" />
+        <FormField label="支持语言" hint="逗号分隔，如 cpp,java,python,arkts">
+          <input v-model="form.languages" class="input" placeholder="cpp,java,python,arkts" />
         </FormField>
       </div>
 

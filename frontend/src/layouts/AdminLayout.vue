@@ -21,6 +21,7 @@ const navSections: NavSection[] = [
   { path: '/admin/db-questions', label: '数据库题管理', icon: 'database' },
   { path: '/admin/objective-questions', label: '客观题管理', icon: 'checklist' },
   { path: '/admin/exams', label: '考试与组卷', icon: 'exam' },
+  { path: '/admin/practices', label: '随堂课练', icon: 'practice' },
   { path: '/admin/submissions', label: '提交监控', icon: 'monitor' },
   { path: '/admin/users', label: '用户管理', icon: 'users', adminOnly: true },
 ]
@@ -82,6 +83,12 @@ function logout() {
             <circle cx="12" cy="12" r="9" />
             <polyline points="12 6 12 12 15 15" />
             <line x1="12" y1="1" x2="12" y2="3" />
+          </svg>
+          <!-- 随堂课练图标 -->
+          <svg v-else-if="s.icon === 'practice'" class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M2 3h20" />
+            <path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3" />
+            <path d="m7 21 5-5 5 5" />
           </svg>
           <!-- 提交监控图标 -->
           <svg v-else-if="s.icon === 'monitor'" class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -455,7 +462,9 @@ function logout() {
 }
 
 /* 优化管理端内部的 container 布局，使其充满主工作区 */
-:deep(.admin.container) {
+:deep(.admin.container),
+:deep(.admin-practices.container),
+:deep(.admin-exams.container) {
   max-width: 100% !important;
   padding: 0 !important;
   margin: 0 !important;

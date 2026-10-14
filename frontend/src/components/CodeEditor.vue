@@ -21,11 +21,19 @@ const emit = defineEmits<{
 const container = ref<HTMLElement | null>(null)
 let editor: monaco.editor.IStandaloneCodeEditor | null = null
 
+const MONACO_LANG_MAP: Record<string, string> = {
+  arkts: 'typescript',
+}
+
+function resolveMonacoLanguage(lang: string): string {
+  return MONACO_LANG_MAP[lang] ?? lang
+}
+
 onMounted(() => {
   if (!container.value) return
   editor = monaco.editor.create(container.value, {
     value: props.modelValue,
-    language: props.language,
+    language: resolveMonacoLanguage(props.language),
     theme: 'vs',
     automaticLayout: true,
     minimap: { enabled: false },
@@ -44,7 +52,7 @@ watch(
   (lang) => {
     const model = editor?.getModel()
     if (model) {
-      monaco.editor.setModelLanguage(model, lang)
+      monaco.editor.setModelLanguage(model, resolveMonacoLanguage(lang))
     }
   },
 )

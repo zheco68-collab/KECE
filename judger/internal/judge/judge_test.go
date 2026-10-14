@@ -53,6 +53,7 @@ func TestFilenameFor(t *testing.T) {
 		"cpp":    "main.cpp",
 		"java":   "Main.java",
 		"python": "main.py",
+		"arkts":  "main.ets",
 		"go":     "main.txt",
 	}
 	for lang, want := range tests {
@@ -69,5 +70,10 @@ func TestExtractCode(t *testing.T) {
 	}
 	if got := extractCode(task, "missing.txt"); got == "" {
 		t.Fatal("expected fallback to any non-empty code")
+	}
+
+	taskArkts := model.Task{CodeContent: map[string]string{"main.ts": "console.log(123);"}}
+	if got := extractCode(taskArkts, "main.ets"); got != "console.log(123);" {
+		t.Fatalf("extractCode(main.ets) fallback to main.ts = %q", got)
 	}
 }

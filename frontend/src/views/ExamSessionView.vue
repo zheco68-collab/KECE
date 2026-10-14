@@ -115,6 +115,7 @@ const CODE_FILES: Record<string, string> = {
   cpp: 'main.cpp',
   java: 'Main.java',
   python: 'main.py',
+  arkts: 'main.ets',
 }
 
 function algoAnswer(state: { code: string; language: string }): string {
@@ -576,6 +577,7 @@ onBeforeUnmount(() => {
                       <option value="cpp">C++ 17</option>
                       <option value="java">Java 17</option>
                       <option value="python">Python 3.10</option>
+                      <option value="arkts">ArkTS</option>
                     </select>
                   </div>
                   <div class="editor-ctrl-right">

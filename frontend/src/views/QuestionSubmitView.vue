@@ -28,7 +28,7 @@ const difficultyLabels: Record<Difficulty, string> = {
   HARD: '困难',
 }
 
-const SUPPORTED_LANGUAGES = ['cpp', 'java', 'python']
+const SUPPORTED_LANGUAGES = ['cpp', 'java', 'python', 'arkts']
 const TEMPLATES: Record<string, string> = {
   cpp: `#include <iostream>
 using namespace std;
@@ -48,8 +48,18 @@ public class Main {
 `,
   python: `# 在此编写代码
 `,
+  arkts: `import * as fs from 'fs';
+
+function main(): void {
+    const input: string = fs.readFileSync(0, 'utf-8').trim();
+    if (!input) return;
+    // 在此编写代码
 }
-const FILENAMES: Record<string, string> = { cpp: 'main.cpp', java: 'Main.java', python: 'main.py' }
+
+main();
+`,
+}
+const FILENAMES: Record<string, string> = { cpp: 'main.cpp', java: 'Main.java', python: 'main.py', arkts: 'main.ets' }
 
 const languages = computed(() =>
   (question.value?.languages ?? []).filter((l) => SUPPORTED_LANGUAGES.includes(l)),

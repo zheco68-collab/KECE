@@ -209,6 +209,8 @@ func filenameFor(lang string) string {
 		return "Main.java"
 	case "python":
 		return "main.py"
+	case "arkts":
+		return "main.ets"
 	default:
 		return "main.txt"
 	}
@@ -218,6 +220,11 @@ func filenameFor(lang string) string {
 func extractCode(task model.Task, filename string) string {
 	if code, ok := task.CodeContent[filename]; ok && code != "" {
 		return code
+	}
+	if filename == "main.ets" {
+		if code, ok := task.CodeContent["main.ts"]; ok && code != "" {
+			return code
+		}
 	}
 	for _, code := range task.CodeContent {
 		if code != "" {

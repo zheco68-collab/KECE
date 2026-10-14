@@ -13,6 +13,7 @@ const navLinks = [
   { path: '/database', label: '数据库' },
   { path: '/frontend', label: '前端' },
   { path: '/objective', label: '客观题' },
+  { path: '/practice', label: '课练' },
   { path: '/exams', label: '考试' },
 ];
 
@@ -71,8 +72,8 @@ function logout() {
 
 <template>
   <header class="app-header">
-    <div class="header-inner">
-      <RouterLink to="/" class="brand">
+    <div class="header-inner container">
+      <RouterLink to="/" class="brand" title="KECE 课测">
         <img class="brand-logo" src="/KECElogo浅色版-trim.png" alt="KECE 课测" />
       </RouterLink>
       <nav class="nav" ref="navRef" @mouseleave="onNavMouseLeave">
@@ -146,13 +147,10 @@ function logout() {
   border-bottom: 1px solid var(--line);
 }
 .header-inner {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 0 24px;
+  position: relative;
   height: 62px;
   display: flex;
   align-items: center;
-  gap: 24px;
 }
 .brand {
   display: flex;
@@ -162,20 +160,25 @@ function logout() {
   font-weight: 700;
   font-size: 18px;
   color: var(--ink);
+  transition: opacity 0.15s ease;
+  user-select: none;
+}
+.brand:hover {
+  opacity: 0.85;
 }
 .brand-logo {
-  height: 40px;
+  height: 28px;
   width: auto;
   display: block;
 }
 .nav {
   position: relative;
-  flex: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 4px;
   height: 62px;
+  flex-shrink: 0;
+  margin-left: -14px;
 }
 .nav-slider {
   position: absolute;
@@ -204,7 +207,7 @@ function logout() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 18px;
+  padding: 0 14px;
   height: 34px;
   color: var(--ink-secondary);
   font-size: 15px;
@@ -212,15 +215,19 @@ function logout() {
   text-decoration: none;
   transition: color 0.15s ease;
   user-select: none;
+  white-space: nowrap !important;
+  flex-shrink: 0;
+  letter-spacing: 0.3px;
 }
 .nav-item:hover {
   color: var(--ink);
 }
 .nav-item.active {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 700;
 }
 .header-right {
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -309,7 +316,49 @@ function logout() {
   height: 10px;
   stroke-width: 2;
 }
-@media (max-width: 860px) {
+@media (min-width: 1400px) {
+  .brand {
+    position: absolute;
+    right: calc(100% + 12px);
+    top: 50%;
+    transform: translateY(-50%);
+  }
+}
+@media (max-width: 1399px) {
+  .brand {
+    position: static;
+    transform: none;
+    margin-right: 14px;
+  }
+  .brand-logo {
+    height: 26px;
+  }
+  .nav {
+    margin-left: 0;
+  }
+}
+@media (max-width: 1160px) {
+  .nav-item {
+    padding: 0 10px;
+    font-size: 14px;
+  }
+  .brand-logo {
+    height: 24px;
+  }
+}
+@media (max-width: 960px) {
+  .header-inner {
+    padding: 0 16px;
+  }
+  .nav-item {
+    padding: 0 6px;
+    font-size: 13px;
+  }
+  .username {
+    max-width: 80px;
+  }
+}
+@media (max-width: 840px) {
   .nav {
     display: none;
   }

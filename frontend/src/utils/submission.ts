@@ -15,11 +15,41 @@ export const STATUS_ABBR: Record<SubmissionStatus, string> = {
   SYSTEM_ERROR: 'SE',
 }
 
+/** 各评测状态的中文标签展示。 */
+export const STATUS_LABELS: Record<SubmissionStatus, string> = {
+  PENDING: '排队中',
+  COMPILING: '编译中',
+  JUDGING: '评测中',
+  AI_REVIEWING: 'AI评审中',
+  ACCEPTED: '答案正确',
+  WRONG_ANSWER: '答案错误',
+  TIME_LIMIT_EXCEEDED: '运行超时',
+  MEMORY_LIMIT_EXCEEDED: '内存超限',
+  RUNTIME_ERROR: '运行错误',
+  COMPILE_ERROR: '编译错误',
+  SYSTEM_ERROR: '系统错误',
+}
+
+export const TERMINAL_STATUSES: SubmissionStatus[] = [
+  'ACCEPTED',
+  'WRONG_ANSWER',
+  'TIME_LIMIT_EXCEEDED',
+  'MEMORY_LIMIT_EXCEEDED',
+  'RUNTIME_ERROR',
+  'COMPILE_ERROR',
+  'SYSTEM_ERROR',
+]
+
+export function isTerminal(status: SubmissionStatus): boolean {
+  return TERMINAL_STATUSES.includes(status)
+}
+
 /** 语言显示名。 */
 export const LANGUAGE_LABELS: Record<string, string> = {
   cpp: 'C++',
   java: 'Java',
   python: 'Python',
+  arkts: 'ArkTS',
 }
 
 /**
