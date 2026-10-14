@@ -23,14 +23,15 @@ public class ObjectiveSubmissionController {
 
     private final ObjectiveQuestionService service;
 
-    @Operation(summary = "我的客观题作答记录（分页/对错筛选）")
+    @Operation(summary = "客观题作答记录（分页/对错筛选/可指定 userId）")
     @RequireRole
     @GetMapping
     public ApiResponse<PageResult<ObjectiveSubmissionListVO>> list(
+            @RequestParam(required = false) Long userId,
             @RequestParam(required = false) Integer correct,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(service.listSubmissions(correct, page, size));
+        return ApiResponse.success(service.listSubmissions(userId, correct, page, size));
     }
 
     @Operation(summary = "当前用户已答对的客观题 id 列表")

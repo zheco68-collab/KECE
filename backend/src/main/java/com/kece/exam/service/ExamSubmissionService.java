@@ -465,10 +465,10 @@ public class ExamSubmissionService {
         if (current == ExamSessionStatus.CANCELLED) {
             return current;
         }
-        if (!now.isBefore(exam.getStartTime()) && now.isBefore(exam.getEndTime())) {
-            target = ExamSessionStatus.ONGOING;
-        } else if (!now.isBefore(exam.getEndTime())) {
+        if (exam.getEndTime() != null && !now.isBefore(exam.getEndTime())) {
             target = ExamSessionStatus.ENDED;
+        } else if (exam.getStartTime() != null && !now.isBefore(exam.getStartTime())) {
+            target = ExamSessionStatus.ONGOING;
         } else {
             target = ExamSessionStatus.UPCOMING;
         }

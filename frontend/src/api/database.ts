@@ -16,6 +16,7 @@ export interface DbQuestionListParams {
 }
 
 export interface DbSubmissionListParams {
+  userId?: number
   status?: SubmissionStatus | ''
   page?: number
   size?: number

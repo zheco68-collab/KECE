@@ -50,6 +50,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.ok(ApiResponse.error(ResultCode.PARAM_ERROR, e.getMessage()));
     }
 
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSizeExceeded(
+            org.springframework.web.multipart.MaxUploadSizeExceededException e) {
+        log.warn("上传文件大小超限: {}", e.getMessage());
+        return ResponseEntity.ok(ApiResponse.error(ResultCode.PARAM_ERROR, "上传文件大小超过限制（最大 10MB）"));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception e) {
         log.error("系统异常", e);

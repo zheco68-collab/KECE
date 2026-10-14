@@ -9,6 +9,7 @@ export interface SubmitPayload {
 }
 
 export interface SubmissionListParams {
+  userId?: number
   status?: string
   page?: number
   size?: number

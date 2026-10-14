@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ func (j *Judge) ProcessSQL(ctx context.Context, sqlQ *queue.Queue, task model.Ta
 	}
 	adminConn, userConn, err := openSQLConnections(j.cfg)
 	if err != nil {
+		log.Printf("sqljudge: openSQLConnections failed: %v", err)
 		j.finishSQLSystemError(ctx, sqlQ, task.SubmissionID)
 		return
 	}
@@ -44,6 +46,7 @@ func (j *Judge) ProcessSQL(ctx context.Context, sqlQ *queue.Queue, task model.Ta
 		caseStart := time.Now()
 		cr, err := j.runSQLCase(ctx, adminConn, userConn, task, tc, sqlText)
 		if err != nil {
+			log.Printf("sqljudge: runSQLCase failed on case %d: %v", i+1, err)
 			j.finishSQLSystemError(ctx, sqlQ, task.SubmissionID)
 			return
 		}

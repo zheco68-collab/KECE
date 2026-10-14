@@ -54,9 +54,9 @@ int search(const vector<int>& nums, int target) {
     filename: 'query.sql',
     langBadge: 'MySQL 8.0',
     code: `-- 查询研发部薪资最高的前三名员工
-SELECT 
-    e.id, 
-    e.name, 
+SELECT
+    e.id,
+    e.name,
     e.salary
 FROM emp e
 WHERE e.dept = 'RD'

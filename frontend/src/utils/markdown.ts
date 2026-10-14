@@ -1,5 +1,8 @@
 import { marked } from 'marked'
+import markedKatex from 'marked-katex-extension'
+import 'katex/dist/katex.min.css'
 
+marked.use(markedKatex({ throwOnError: false }))
 marked.setOptions({ gfm: true, breaks: true })
 
 /** 极简 XSS 清洗：移除脚本与内联事件，供可信度较低的 Markdown 内容使用。 */

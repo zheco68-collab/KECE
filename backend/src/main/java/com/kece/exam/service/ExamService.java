@@ -412,10 +412,10 @@ public class ExamService {
         if (current == ExamSessionStatus.CANCELLED) {
             return current;
         }
-        if (!now.isBefore(exam.getStartTime()) && now.isBefore(exam.getEndTime())) {
-            target = ExamSessionStatus.ONGOING;
-        } else if (!now.isBefore(exam.getEndTime())) {
+        if (exam.getEndTime() != null && !now.isBefore(exam.getEndTime())) {
             target = ExamSessionStatus.ENDED;
+        } else if (exam.getStartTime() != null && !now.isBefore(exam.getStartTime())) {
+            target = ExamSessionStatus.ONGOING;
         } else {
             target = ExamSessionStatus.UPCOMING;
         }
@@ -466,6 +466,7 @@ public class ExamService {
     }
 
     private ExamVO toVO(Exam exam, boolean withQuestions, Boolean submitted) {
+        advanceStatus(exam);
         List<ExamQuestionVO> questions =
                 withQuestions
                         ? examQuestionMapper.findByExamId(exam.getId()).stream()
@@ -491,6 +492,7 @@ public class ExamService {
     }
 
     private ExamSessionVO toSessionVO(Exam exam) {
+        advanceStatus(exam);
         return ExamSessionVO.builder()
                 .id(exam.getId())
                 .examId(exam.getId())

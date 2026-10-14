@@ -36,14 +36,15 @@ public class SubmissionController {
         return ApiResponse.success(submissionService.submit(request));
     }
 
-    @Operation(summary = "提交记录列表（分页/状态筛选）")
+    @Operation(summary = "提交记录列表（分页/状态筛选/可指定 userId）")
     @RequireRole
     @GetMapping
     public ApiResponse<PageResult<SubmissionListVO>> list(
+            @RequestParam(required = false) Long userId,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(submissionService.list(status, page, size));
+        return ApiResponse.success(submissionService.list(userId, status, page, size));
     }
 
     @Operation(summary = "当前用户已通过的题目 id 列表")

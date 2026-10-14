@@ -90,19 +90,21 @@ async function load() {
 
 /** 客户端辅助状态推断（结合服务器返回的 sessionStatus 与本地时间） */
 function getRealStatus(exam: Exam): 'ONGOING' | 'UPCOMING' | 'ENDED' {
-  if (exam.sessionStatus === 'ONGOING') return 'ONGOING'
-  if (exam.sessionStatus === 'ENDED' || exam.sessionStatus === 'CANCELLED') return 'ENDED'
-  if (exam.sessionStatus === 'UPCOMING') {
-    const now = new Date().getTime()
-    if (exam.startTime && new Date(exam.startTime).getTime() <= now) {
-      if (exam.endTime && new Date(exam.endTime).getTime() <= now) {
-        return 'ENDED'
-      }
-      return 'ONGOING'
-    }
+  if (exam.sessionStatus === 'CANCELLED') return 'ENDED'
+  const now = Date.now()
+  const start = exam.startTime ? new Date(exam.startTime).getTime() : 0
+  const end = exam.endTime ? new Date(exam.endTime).getTime() : 0
+
+  if (end && now >= end) {
+    return 'ENDED'
+  }
+  if (start && now < start) {
     return 'UPCOMING'
   }
-  return 'ENDED'
+  if (exam.sessionStatus === 'ENDED') {
+    return 'ENDED'
+  }
+  return 'ONGOING'
 }
 
 const filteredList = computed(() => {

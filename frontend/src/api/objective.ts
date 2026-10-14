@@ -16,6 +16,7 @@ export interface ObjectiveListParams {
 }
 
 export interface ObjectiveSubmissionListParams {
+  userId?: number
   /** 1 只看答对 / 0 只看答错 / 不传为全部 */
   correct?: 0 | 1
   page?: number

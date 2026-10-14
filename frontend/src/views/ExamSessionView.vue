@@ -1173,6 +1173,8 @@ onBeforeUnmount(() => {
 .schema-code {
   margin: 0;
   padding: 12px;
+  background: var(--bg);
+  color: var(--ink);
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 12px;
   overflow-x: auto;

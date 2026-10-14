@@ -8,6 +8,9 @@ export interface UserInfo {
   id: number
   username: string
   email: string | null
+  avatarUrl?: string | null
+  bio?: string | null
+  githubUrl?: string | null
   roles: string[]
 }
 

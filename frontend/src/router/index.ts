@@ -6,6 +6,7 @@ declare module 'vue-router' {
   interface RouteMeta {
     roles?: string[];
     title?: string;
+    requiresAuth?: boolean;
   }
 }
 
@@ -40,8 +41,7 @@ const router = createRouter({
         },
         {
           path: 'submissions',
-          name: 'submissions',
-          component: () => import('@/views/SubmissionsView.vue'),
+          redirect: () => ({ path: '/profile', query: { tab: 'code' } }),
         },
         {
           path: 'submissions/:submissionId',
@@ -107,6 +107,12 @@ const router = createRouter({
           path: 'exams/:id/result',
           name: 'exam-result',
           component: () => import('@/views/ExamResultView.vue'),
+        },
+        {
+          path: 'profile/:id?',
+          name: 'profile',
+          component: () => import('@/views/ProfileView.vue'),
+          meta: { title: '个人主页', requiresAuth: true },
         },
       ],
     },
@@ -212,11 +218,14 @@ const router = createRouter({
   ],
 });
 
-// 已登录用户访问登录/注册页时跳回首页；带 roles 的页面做角色校验
+// 已登录用户访问登录/注册页时跳回首页；未登录用户访问 requiresAuth 跳登录；带 roles 的页面做角色校验
 router.beforeEach((to) => {
   const userStore = useUserStore();
   if ((to.name === 'login' || to.name === 'register') && userStore.isLoggedIn) {
     return { name: 'home' };
+  }
+  if (to.meta.requiresAuth && !userStore.isLoggedIn) {
+    return { name: 'login', query: { redirect: to.fullPath } };
   }
   const roles = to.meta.roles;
   if (roles && roles.length > 0) {

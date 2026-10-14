@@ -85,7 +85,7 @@ func Load() Config {
 		JudgeMysqlHost:     getenv("JUDGE_MYSQL_HOST", "127.0.0.1"),
 		JudgeMysqlPort:     getenv("JUDGE_MYSQL_PORT", "3307"),
 		JudgeMysqlUser:     getenv("JUDGE_MYSQL_USER", "root"),
-		JudgeMysqlPassword: getenv("JUDGE_MYSQL_PASSWORD", ""),
+		JudgeMysqlPassword: getenv("JUDGE_MYSQL_PASSWORD", "judge123"),
 		SqlTimeout:         time.Duration(getenvInt("SQL_TIMEOUT_MS", 5000)) * time.Millisecond,
 	}
 }

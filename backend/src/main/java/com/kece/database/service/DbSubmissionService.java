@@ -95,13 +95,13 @@ public class DbSubmissionService {
         return pending;
     }
 
-    /** 数据库提交记录列表：无论何种用户类型，均仅返回本人提交，按 id 倒序分页。 */
-    public PageResult<DbSubmissionListVO> list(String status, int page, int size) {
+    /** 数据库提交记录列表：默认本人提交，可指定 targetUserId 查看该用户提交，按 id 倒序分页。 */
+    public PageResult<DbSubmissionListVO> list(Long targetUserId, String status, int page, int size) {
         AuthUser user = AuthContextHolder.get();
         if (user == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
-        Long userId = user.getId();
+        Long userId = targetUserId != null ? targetUserId : user.getId();
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(size, 1), 100);
         int offset = (safePage - 1) * safeSize;
@@ -111,6 +111,10 @@ public class DbSubmissionService {
                 submissionMapper.findPage(userId, null, statusFilter, null, offset, safeSize);
         long total = submissionMapper.count(userId, null, statusFilter, null);
         return new PageResult<>(list, total, safePage, safeSize);
+    }
+
+    public PageResult<DbSubmissionListVO> list(String status, int page, int size) {
+        return list(null, status, page, size);
     }
 
     /** 后台数据库提交列表：ADMIN 可跨用户/跨题查询；TEACHER 仅限自己所出题目的提交（仍可筛任意用户，归属约束在 SQL createdBy 条件）。 */

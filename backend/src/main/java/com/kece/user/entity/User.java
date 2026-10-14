@@ -11,6 +11,9 @@ public class User {
     private String username;
     private String passwordHash;
     private String email;
+    private String avatarUrl;
+    private String bio;
+    private String githubUrl;
 
     /** 角色列表，逗号分隔（USER/TEACHER/ADMIN）。 */
     private String roles;

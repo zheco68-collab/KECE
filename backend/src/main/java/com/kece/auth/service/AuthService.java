@@ -104,6 +104,7 @@ public class AuthService {
                 .id(user.getId())
                 .username(user.getUsername())
                 .email(user.getEmail())
+                .avatarUrl(user.getAvatarUrl())
                 .roles(parseRoles(user.getRoles()))
                 .build();
     }

@@ -49,5 +49,12 @@ export const useUserStore = defineStore('user', () => {
     return !!userInfo.value?.roles?.includes(role)
   }
 
-  return { token, refreshToken, userInfo, isLoggedIn, setToken, setAuth, clearAuth, hasRole }
+  function updateUserInfo(partial: Partial<UserInfo>) {
+    if (userInfo.value) {
+      userInfo.value = { ...userInfo.value, ...partial }
+      localStorage.setItem(USER_KEY, JSON.stringify(userInfo.value))
+    }
+  }
+
+  return { token, refreshToken, userInfo, isLoggedIn, setToken, setAuth, clearAuth, hasRole, updateUserInfo }
 })

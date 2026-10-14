@@ -390,6 +390,7 @@ onMounted(async () => {
 .prose :deep(code) {
   padding: 2px 6px;
   background: var(--bg);
+  color: var(--ink);
   border: 1px solid var(--line);
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 13px;
@@ -397,10 +398,17 @@ onMounted(async () => {
 }
 .prose :deep(pre) {
   background: var(--bg);
+  color: var(--ink);
   border: 1px solid var(--line);
   padding: 16px;
   overflow-x: auto;
   border-radius: 0;
+}
+.prose :deep(pre code) {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
 }
 
 /* 样例卡片 */

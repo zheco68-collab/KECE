@@ -177,10 +177,10 @@ public class ObjectiveQuestionService {
         return submissionMapper.findCorrectQuestionIds(userId);
     }
 
-    /** 我的客观题作答记录：仅返回本人记录，按 id 倒序分页；correct 为 null 表示不筛对错。 */
+    /** 客观题作答记录：默认本人记录，可指定 targetUserId 查看该用户作答，按 id 倒序分页；correct 为 null 表示不筛对错。 */
     public PageResult<ObjectiveSubmissionListVO> listSubmissions(
-            Integer correct, int page, int size) {
-        Long userId = AuthContextHolder.currentUserId();
+            Long targetUserId, Integer correct, int page, int size) {
+        Long userId = targetUserId != null ? targetUserId : AuthContextHolder.currentUserId();
         if (userId == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
@@ -191,6 +191,11 @@ public class ObjectiveQuestionService {
                 submissionMapper.findPage(userId, null, correct, offset, safeSize);
         long total = submissionMapper.count(userId, null, correct);
         return new PageResult<>(list, total, safePage, safeSize);
+    }
+
+    public PageResult<ObjectiveSubmissionListVO> listSubmissions(
+            Integer correct, int page, int size) {
+        return listSubmissions(null, correct, page, size);
     }
 
     /** 后台客观题作答列表：ADMIN 可跨用户/跨题查询；其余角色一律锁死为本人记录（与代码/数据库题按题目归属的约束方式不同）。 */

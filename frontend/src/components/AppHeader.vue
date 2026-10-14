@@ -1,10 +1,61 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/user';
 
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
+
+const navLinks = [
+  { path: '/', label: '首页' },
+  { path: '/questions', label: '编程' },
+  { path: '/database', label: '数据库' },
+  { path: '/frontend', label: '前端' },
+  { path: '/objective', label: '客观题' },
+  { path: '/exams', label: '考试' },
+];
+
+const navRef = ref<HTMLElement | null>(null);
+const sliderVisible = ref(false);
+const sliderAnimating = ref(false);
+const sliderStyle = ref({
+  left: '0px',
+  width: '0px',
+});
+
+function onMouseEnterItem(e: MouseEvent) {
+  const target = e.currentTarget as HTMLElement;
+  if (!target || !navRef.value) return;
+  const navRect = navRef.value.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+
+  sliderStyle.value = {
+    left: `${targetRect.left - navRect.left}px`,
+    width: `${targetRect.width}px`,
+  };
+
+  if (!sliderVisible.value) {
+    sliderAnimating.value = false;
+    sliderVisible.value = true;
+    requestAnimationFrame(() => {
+      sliderAnimating.value = true;
+    });
+  } else {
+    sliderAnimating.value = true;
+  }
+}
+
+function onNavMouseLeave() {
+  sliderVisible.value = false;
+  sliderAnimating.value = false;
+}
+
+const roleInfo = computed(() => {
+  if (userStore.hasRole('ADMIN')) return { label: '管理员', class: 'role-admin' };
+  if (userStore.hasRole('TEACHER')) return { label: '教师', class: 'role-teacher' };
+  return { label: '学生', class: 'role-student' };
+});
 
 // 按路径段匹配，避免 /database 与其详情页 /database/:id 同时高亮。
 function isActive(path: string): boolean {
@@ -24,26 +75,47 @@ function logout() {
       <RouterLink to="/" class="brand">
         <img class="brand-logo" src="/KECElogo浅色版-trim.png" alt="KECE 课测" />
       </RouterLink>
-      <nav class="nav">
-        <RouterLink to="/" :class="{ active: isActive('/') }">首页</RouterLink>
-        <RouterLink to="/questions" :class="{ active: isActive('/questions') }">编程</RouterLink>
-        <RouterLink to="/database" :class="{ active: isActive('/database') }">数据库</RouterLink>
-        <RouterLink to="/frontend" :class="{ active: isActive('/frontend') }">前端</RouterLink>
-        <RouterLink to="/objective" :class="{ active: isActive('/objective') }">客观题</RouterLink>
-        <RouterLink to="/exams" :class="{ active: isActive('/exams') }">考试</RouterLink>
+      <nav class="nav" ref="navRef" @mouseleave="onNavMouseLeave">
+        <div
+          class="nav-slider"
+          :class="{ 'is-visible': sliderVisible, 'is-animating': sliderAnimating }"
+          :style="sliderStyle"
+        ></div>
         <RouterLink
-          v-if="userStore.isLoggedIn"
-          to="/submissions"
-          :class="{ active: isActive('/submissions') }"
-          >我的提交</RouterLink
+          v-for="item in navLinks"
+          :key="item.path"
+          :to="item.path"
+          class="nav-item"
+          :class="{ active: isActive(item.path) }"
+          @mouseenter="onMouseEnterItem"
         >
+          {{ item.label }}
+        </RouterLink>
       </nav>
       <div class="header-right">
         <template v-if="userStore.isLoggedIn">
-          <span class="username">{{ userStore.userInfo?.username }}</span>
-          <span v-if="userStore.hasRole('ADMIN') || userStore.hasRole('TEACHER')" class="role-tag">
-            {{ userStore.hasRole('ADMIN') ? '管理员' : '出题人' }}
-          </span>
+          <RouterLink
+            to="/profile"
+            class="user-profile-link"
+            :class="{ active: isActive('/profile') }"
+            title="个人主页"
+          >
+            <div class="user-avatar-wrap">
+              <img
+                v-if="userStore.userInfo?.avatarUrl"
+                :src="userStore.userInfo.avatarUrl"
+                class="user-avatar"
+                alt="Avatar"
+              />
+              <span v-else class="user-avatar-placeholder mono">
+                {{ userStore.userInfo?.username?.charAt(0)?.toUpperCase() || 'U' }}
+              </span>
+            </div>
+            <span class="username">{{ userStore.userInfo?.username }}</span>
+            <span class="role-tag" :class="roleInfo.class">
+              {{ roleInfo.label }}
+            </span>
+          </RouterLink>
           <button class="btn btn-ghost btn-sm" @click="logout">退出</button>
           <a
             v-if="userStore.hasRole('ADMIN') || userStore.hasRole('TEACHER')"
@@ -97,20 +169,54 @@ function logout() {
   display: block;
 }
 .nav {
+  position: relative;
   flex: 1;
   display: flex;
+  align-items: center;
   justify-content: center;
-  gap: 28px;
+  gap: 4px;
+  height: 62px;
 }
-.nav a {
+.nav-slider {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 34px;
+  background: #ececec;
+  border-radius: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.nav-slider.is-animating {
+  transition:
+    left 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    width 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.15s ease;
+}
+.nav-slider.is-visible {
+  opacity: 1;
+}
+.nav-item {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 18px;
+  height: 34px;
   color: var(--ink-secondary);
   font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
   transition: color 0.15s ease;
+  user-select: none;
 }
-.nav a:hover {
+.nav-item:hover {
   color: var(--ink);
 }
-.nav a.active {
+.nav-item.active {
   color: var(--ink);
   font-weight: 600;
 }
@@ -121,21 +227,77 @@ function logout() {
   flex-shrink: 0;
   min-width: 0;
 }
-.username {
+.user-profile-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px 3px 4px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  transition: all 0.15s ease;
+  color: var(--ink);
+  height: 34px;
+  box-sizing: border-box;
+}
+.user-profile-link:hover,
+.user-profile-link.active {
+  border-color: var(--ink);
+  background: var(--bg);
+}
+.user-avatar-wrap {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.user-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.user-avatar-placeholder {
+  font-size: 13px;
+  font-weight: 700;
   color: var(--ink-secondary);
+}
+.username {
+  color: var(--ink);
   font-size: 14px;
+  font-weight: 600;
   max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .role-tag {
-  font-size: 12px;
-  color: var(--ink-tertiary);
-  border: 1px solid var(--line);
-  border-radius: var(--pill);
-  padding: 1px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 0;
+  padding: 1px 6px;
+  line-height: 1.4;
   white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+.role-tag.role-admin {
+  background: #7048e8;
+  color: #fff;
+  border: 1px solid #5f3dc4;
+}
+.role-tag.role-teacher {
+  background: #2b8a3e;
+  color: #fff;
+  border: 1px solid #237032;
+}
+.role-tag.role-student {
+  background: #1e1e1e;
+  color: #fff;
+  border: 1px solid #111;
 }
 .admin-entry-btn {
   display: inline-flex;

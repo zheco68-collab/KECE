@@ -25,14 +25,15 @@ public class DbSubmissionController {
 
     private final DbSubmissionService submissionService;
 
-    @Operation(summary = "数据库提交记录列表（分页/状态筛选）")
+    @Operation(summary = "数据库提交记录列表（分页/状态筛选/可指定 userId）")
     @RequireRole
     @GetMapping
     public ApiResponse<PageResult<DbSubmissionListVO>> list(
+            @RequestParam(required = false) Long userId,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(submissionService.list(status, page, size));
+        return ApiResponse.success(submissionService.list(userId, status, page, size));
     }
 
     @Operation(summary = "当前用户已通过的数据库题目 id 列表")

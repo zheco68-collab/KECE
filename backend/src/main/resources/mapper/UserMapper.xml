@@ -7,6 +7,9 @@
         <result column="username" property="username"/>
         <result column="password_hash" property="passwordHash"/>
         <result column="email" property="email"/>
+        <result column="avatar_url" property="avatarUrl"/>
+        <result column="bio" property="bio"/>
+        <result column="github_url" property="githubUrl"/>
         <result column="roles" property="roles"/>
         <result column="status" property="status"/>
         <result column="created_at" property="createdAt"/>
@@ -63,6 +66,14 @@
 
     <update id="updatePassword">
         UPDATE `user` SET password_hash = #{passwordHash}, updated_at = CURRENT_TIMESTAMP WHERE id = #{id}
+    </update>
+
+    <update id="updateProfile">
+        UPDATE `user` SET bio = #{bio}, github_url = #{githubUrl}, updated_at = CURRENT_TIMESTAMP WHERE id = #{id}
+    </update>
+
+    <update id="updateAvatar">
+        UPDATE `user` SET avatar_url = #{avatarUrl}, updated_at = CURRENT_TIMESTAMP WHERE id = #{id}
     </update>
 
 </mapper>
