@@ -97,6 +97,16 @@ KECE 采用**纯粹极简的硬朗直角（0-Radius）与 Bento Grid 工业美�
 - **防重入交卷保护**：
   - 考场交卷后永久锁定作答记录，考场入口安全阻断，考试大厅按钮置灰。
 
+### 3. 开发者主页与公开档案 (Developer Portfolio)
+- **硬朗个人名片**：128×128px 直角大头像（支持 5MB 本地文件上传与 10MB 请求优雅容错）、个性签名 Slogan 引用框、UID、加入时间及 GitHub 外链直达。
+- **52-周代码打卡热力图**：真实沉淀过去 365 天每日 AC 代码提交量，配备「年度 AC 题数」、「当前连击」与「历史最长连击」三大高反差指标方块。
+- **全量评测历史整合**：打破传统割裂，主页深度整合算法题代码、数据库 SQL 与客观题作答三大分类，支持状态精确筛选、代码弹窗高亮回溯与一键复制。
+- **全平台公开透明（GitHub / LeetCode 范式）**：开放跨用户主页访问（`/profile/:id`），所有用户可互相查看彼此的技术打卡与实战提交，访客视角安全隔离编辑特权。
+- **工业化极客交互与纯色体系**：
+  - **纯色设计规范**：角色纯色（管理员紫/教师绿/学生黑）、算法难度（简单绿/中等橙/困难红）、数据库题型（SELECT 纯黑/DML 钛金深灰）；
+  - **题库列表工业化**：单列富信息卡片（题号、状态圈、时空限制、支持语言）、做题进度仪表板、随机刷题快捷键；
+  - **顶栏交互**：主导航纯净直观，配备鼠标悬浮灰色方块平滑滑动（Hover Slider）动效。
+
 ---
 
 ## 技术栈与架构
@@ -116,28 +126,95 @@ KECE 采用**纯粹极简的硬朗直角（0-Radius）与 Bento Grid 工业美�
 
 ### 异步评测链路架构
 
-```
-┌─────────────┐       HTTPS / RESTful      ┌─────────────────────────┐
-│  Vue 3 SPA  │ ─────────────────────────▶ │  Spring Boot 3 后端服务   │ ──▶ MySQL 8.0 (业务库 kece)
-└─────────────┘                            │  (认证鉴权 / 组卷 / 归档)  │
-       │                                   └────────────┬────────────┘
-       │                                                │ 写入任务队列 (judge:queue / judge:sql:queue)
-       │ 轮询状态 (1s)                                     ▼
-       │                                   ┌─────────────────────────┐
-       ▼                                   │   Redis 7 消息中间件     │
-┌─────────────┐                            └────────────┬────────────┘
-│ 获取最新结果 │ ◀───────────────────────────────────────┤ 拉取评测任务 (BRPOP)
-└─────────────┘                                         ▼
-                                           ┌─────────────────────────┐
-                                           │     Go 判题机 Worker     │
-                                           └───────┬───────────┬─────┘
-                                                   │           │
-                     代码编译运行 (Cgroups/Docker)  ▼           ▼ SQL 一次性临时库执行比对
-                                         ┌────────────┐   ┌────────────────┐
-                                         │ Docker 沙箱 │   │ 判题 MySQL 3307│
-                                         └────────────┘   └────────────────┘
-```
+<div style="background: #161b22; border: 1px solid #30363d; padding: 16px 20px; margin: 16px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #c9d1d9;">
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid #30363d;">
+<div style="display: flex; align-items: center; gap: 8px;">
+<span style="background: #1e1e1e; border: 1px solid #484f58; color: #ffffff; font-size: 10px; font-weight: 700; padding: 2px 6px; font-family: monospace;">PIPELINE</span>
+<strong style="color: #f0f6fc; font-size: 14px;">KECE 异步多模态判题链路拓扑</strong>
+</div>
+<span style="font-size: 11px; color: #8b949e; font-family: monospace;">High-Concurrency Engine v0.2.1</span>
+</div>
+<table width="100%" cellpadding="0" cellspacing="8" style="border-collapse: separate; table-layout: fixed;">
+<tr>
+<td width="25%" valign="top" style="background: #0d1117; border: 1px solid #388bfd; padding: 12px;">
+<div style="margin-bottom: 6px;"><span style="background: #1971c2; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 5px;">1. 客户端</span> <code style="font-size: 11px; color: #79c0ff;">Vue 3</code></div>
+<div style="font-weight: 600; color: #f0f6fc; font-size: 12px; margin-bottom: 4px;">Monaco Editor</div>
+<div style="font-size: 11px; color: #8b949e; line-height: 1.5;">• 代码/SQL 作答与提示<br>• 1s 轮询评测终态<br>• 实时结果比对呈现</div>
+<div style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed #30363d; font-size: 11px; color: #58a6ff; font-family: monospace; text-align: center;">POST /submissions ➔</div>
+</td>
+<td width="25%" valign="top" style="background: #0d1117; border: 1px solid #2ea043; padding: 12px;">
+<div style="margin-bottom: 6px;"><span style="background: #2b8a3e; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 5px;">2. 业务调度</span> <code style="font-size: 11px; color: #7ee787;">Java 17</code></div>
+<div style="font-weight: 600; color: #f0f6fc; font-size: 12px; margin-bottom: 4px;">Spring Boot 3</div>
+<div style="font-size: 11px; color: #8b949e; line-height: 1.5;">• JWT 鉴权与防重校验<br>• 初始状态置 PENDING<br>• MySQL 提交记录持久化</div>
+<div style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed #30363d; font-size: 11px; color: #3fb950; font-family: monospace; text-align: center;">LPUSH judge:queue ➔</div>
+</td>
+<td width="25%" valign="top" style="background: #0d1117; border: 1px solid #f85149; padding: 12px;">
+<div style="margin-bottom: 6px;"><span style="background: #c92a2a; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 5px;">3. 异步解耦</span> <code style="font-size: 11px; color: #ff7b72;">Redis 7</code></div>
+<div style="font-weight: 600; color: #f0f6fc; font-size: 12px; margin-bottom: 4px;">Broker & Cache</div>
+<div style="font-size: 11px; color: #8b949e; line-height: 1.5;">• <code>judge:queue</code> 算法题<br>• <code>judge:sql:queue</code> 数据库<br>• 分布式评测锁与缓存</div>
+<div style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed #30363d; font-size: 11px; color: #ff7b72; font-family: monospace; text-align: center;">BRPOP 任务认领 ➔</div>
+</td>
+<td width="25%" valign="top" style="background: #0d1117; border: 1px solid #a371f7; padding: 12px;">
+<div style="margin-bottom: 6px;"><span style="background: #7048e8; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 5px;">4. 判题执行</span> <code style="font-size: 11px; color: #d2a8ff;">Go 1.22+</code></div>
+<div style="font-weight: 600; color: #f0f6fc; font-size: 12px; margin-bottom: 4px;">Judger Worker</div>
+<div style="font-size: 11px; color: #8b949e; line-height: 1.5;">• 协程池高并发消费<br>• 看门狗超时熔断<br>• 智能比对结果落库</div>
+<div style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed #30363d; font-size: 11px; color: #d2a8ff; font-family: monospace; text-align: center;">沙箱隔离执行 ⬇</div>
+</td>
+</tr>
+</table>
+<table width="100%" cellpadding="0" cellspacing="8" style="border-collapse: separate; margin-top: 4px; table-layout: fixed;">
+<tr>
+<td width="50%" valign="top" style="background: #0d1117; border: 1px solid #30363d; border-left: 3px solid #1971c2; padding: 10px 14px;">
+<div style="font-size: 12px; font-weight: 700; color: #58a6ff; margin-bottom: 4px;">SANDBOX A：Docker / Linux Cgroups v2 沙箱</div>
+<div style="font-size: 11px; color: #8b949e; line-height: 1.5;">严格限制 CPU 限额与 256MB 内存，Seccomp 拦截危险 syscall 并禁用宿主机网络，产出 AC / WA / TLE / MLE / RE。</div>
+</td>
+<td width="50%" valign="top" style="background: #0d1117; border: 1px solid #30363d; border-left: 3px solid #495057; padding: 10px 14px;">
+<div style="font-size: 12px; font-weight: 700; color: #e6edf3; margin-bottom: 4px;">SANDBOX B：独立 MySQL 判题实例 (端口 3307)</div>
+<div style="font-size: 11px; color: #8b949e; line-height: 1.5;">动态创建临时库 <code>judge_{subId}_{point}</code>，导入测试数据后执行 SQL 并智能对拍，执行完毕立即 DROP 销毁，物理级强隔离。</div>
+</td>
+</tr>
+</table>
+</div>
 
+```mermaid
+flowchart LR
+    subgraph Client ["客户端"]
+        Vue["Vue 3 SPA<br/>(Monaco Editor)"]
+    end
+
+    subgraph Backend ["业务核心"]
+        Boot["Spring Boot 3<br/>(业务调度)"]
+        DB[("MySQL 8.0<br/>(业务主库)")]
+    end
+
+    subgraph Middleware ["异步中间件"]
+        Redis[("Redis 7<br/>(任务队列)")]
+    end
+
+    subgraph Engine ["评测集群"]
+        Worker["Go 判题 Worker<br/>(协程池调度)"]
+        Docker["Docker 沙箱<br/>(Cgroups 算法评测)"]
+        MySQL3307["MySQL 3307<br/>(临时库 SQL 评测)"]
+    end
+
+    Vue -->|1. 提交代码/SQL| Boot
+    Vue -.->|轮询 1s 查终态| Boot
+    Boot -->|2. 记录持久化| DB
+    Boot -->|3. LPUSH 任务| Redis
+    Redis -->|4. BRPOP 消费| Worker
+    Worker -->|5a. 编译运行| Docker
+    Worker -->|5b. 临时库对拍| MySQL3307
+    Docker -->|结果落库| DB
+    MySQL3307 -->|结果落库| DB
+
+    style Vue fill:#1971c2,stroke:#1864ab,color:#fff
+    style Boot fill:#2b8a3e,stroke:#237032,color:#fff
+    style DB fill:#495057,stroke:#343a40,color:#fff
+    style Redis fill:#c92a2a,stroke:#b02525,color:#fff
+    style Worker fill:#7048e8,stroke:#5f3dc4,color:#fff
+    style Docker fill:#1e1e1e,stroke:#343a40,color:#fff
+    style MySQL3307 fill:#1e1e1e,stroke:#343a40,color:#fff
+```
 ---
 
 ## 项目目录结构
