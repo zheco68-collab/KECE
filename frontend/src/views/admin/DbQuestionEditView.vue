@@ -246,7 +246,7 @@ onMounted(() => {
         <FormField label="题目描述" required :error="formErrors.description">
           <div class="editor-assistant-bar">
             <span class="assistant-tip">
-              💡 规范题面建议包含题目要求、字段字典及样例输入/期望输出表格
+              规范题面建议包含题目要求、表结构说明及样例输入与期望输出表格
             </span>
             <button
               type="button"
@@ -254,7 +254,7 @@ onMounted(() => {
               title="根据下方建表 DDL 与测试点数据，自动生成标准 Markdown 模板"
               @click="handleGenerateTemplate"
             >
-              🪄 一键生成规范题面模板 (含输入/期望输出表)
+              生成标准题面模板
             </button>
           </div>
           <MarkdownEditor v-model="form.description" placeholder="支持 Markdown 语法" />

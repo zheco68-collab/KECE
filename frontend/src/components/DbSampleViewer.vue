@@ -24,7 +24,6 @@ const props = defineProps<{
 }>()
 
 const { success, error: toastError } = useToast()
-const viewMode = ref<'table' | 'raw'>('table')
 
 const schemas = computed(() => parseSchemaSql(props.schemaSql))
 
@@ -34,17 +33,41 @@ interface ParsedCaseGroup {
   tables: ParsedSeedTable[]
   expectedOutputRaw: string | null
   expectedResult: ParsedResultSet | null
+  showRawSeed: boolean
+  showRawOutput: boolean
 }
 
+const rawToggles = ref<Record<number, { seed: boolean; output: boolean }>>({})
+
 const parsedCases = computed<ParsedCaseGroup[]>(() => {
-  return props.sampleCases.map((c, idx) => ({
-    originalIndex: idx + 1,
-    seedSql: c.seedSql,
-    tables: parseSeedSql(c.seedSql, schemas.value),
-    expectedOutputRaw: c.expectedOutput ?? null,
-    expectedResult: parseExpectedOutput(c.expectedOutput),
-  }))
+  return props.sampleCases.map((c, idx) => {
+    const caseIdx = idx + 1
+    const toggles = rawToggles.value[caseIdx] || { seed: false, output: false }
+    return {
+      originalIndex: caseIdx,
+      seedSql: c.seedSql,
+      tables: parseSeedSql(c.seedSql, schemas.value),
+      expectedOutputRaw: c.expectedOutput ?? null,
+      expectedResult: parseExpectedOutput(c.expectedOutput),
+      showRawSeed: toggles.seed,
+      showRawOutput: toggles.output,
+    }
+  })
 })
+
+function toggleRawSeed(caseIdx: number) {
+  if (!rawToggles.value[caseIdx]) {
+    rawToggles.value[caseIdx] = { seed: false, output: false }
+  }
+  rawToggles.value[caseIdx].seed = !rawToggles.value[caseIdx].seed
+}
+
+function toggleRawOutput(caseIdx: number) {
+  if (!rawToggles.value[caseIdx]) {
+    rawToggles.value[caseIdx] = { seed: false, output: false }
+  }
+  rawToggles.value[caseIdx].output = !rawToggles.value[caseIdx].output
+}
 
 async function copyText(text: string | null | undefined, label: string) {
   if (!text) return
@@ -61,30 +84,8 @@ async function copyText(text: string | null | undefined, label: string) {
   <div class="db-sample-viewer card">
     <div class="sample-header">
       <div class="header-left">
-        <span class="sec-title">样例数据与期望结果 (Samples & Output)</span>
+        <span class="sec-title">样例测试数据</span>
         <span class="sample-count-badge">共 {{ sampleCases.length }} 组公开样例</span>
-      </div>
-
-      <div class="header-right">
-        <!-- 视图切换 -->
-        <div class="view-switch-tabs">
-          <button
-            type="button"
-            class="switch-btn"
-            :class="{ active: viewMode === 'table' }"
-            @click="viewMode = 'table'"
-          >
-            📊 表格视图
-          </button>
-          <button
-            type="button"
-            class="switch-btn"
-            :class="{ active: viewMode === 'raw' }"
-            @click="viewMode = 'raw'"
-          >
-            ⌨️ 原始文本
-          </button>
-        </div>
       </div>
     </div>
 
@@ -96,31 +97,34 @@ async function copyText(text: string | null | undefined, label: string) {
         class="sample-case-box"
       >
         <div class="case-box-head">
-          <div class="case-head-left">
-            <span class="case-badge">样例 #{{ grp.originalIndex }}</span>
-            <span class="case-hint muted">输入初始数据与期望查询结果集对照</span>
-          </div>
+          <span class="case-badge">样例 #{{ grp.originalIndex }}</span>
         </div>
 
         <div class="case-split-grid">
           <!-- 左栏：输入数据 -->
           <div class="case-part input-part">
             <div class="part-header">
-              <div class="part-title">
-                <span class="part-icon">📥</span>
-                <span>输入数据表 (Input Seed)</span>
+              <span class="part-title">输入数据</span>
+              <div class="part-actions">
+                <button
+                  type="button"
+                  class="btn-tool-sm"
+                  @click="toggleRawSeed(grp.originalIndex)"
+                >
+                  {{ grp.showRawSeed ? '查看表格' : '查看 SQL' }}
+                </button>
+                <button
+                  type="button"
+                  class="btn-tool-sm"
+                  @click="copyText(grp.seedSql, `样例 #${grp.originalIndex} 初始 SQL`)"
+                >
+                  复制 SQL
+                </button>
               </div>
-              <button
-                type="button"
-                class="btn-copy-sm"
-                @click="copyText(grp.seedSql, `样例 #${grp.originalIndex} 初始数据`)"
-              >
-                复制初始 SQL
-              </button>
             </div>
 
             <!-- 1. 表格视图 -->
-            <div v-if="viewMode === 'table' && grp.tables.length > 0" class="case-tables-list">
+            <div v-if="!grp.showRawSeed && grp.tables.length > 0" class="case-tables-list">
               <div
                 v-for="(tbl, tIdx) in grp.tables"
                 :key="tIdx"
@@ -128,7 +132,6 @@ async function copyText(text: string | null | undefined, label: string) {
               >
                 <div class="grid-card-head">
                   <span class="table-name-tag">
-                    <span class="table-icon">▦</span>
                     <code>{{ tbl.tableName }}</code> 表
                   </span>
                   <span class="row-count-tag mono">共 {{ tbl.rows.length }} 条记录</span>
@@ -176,27 +179,31 @@ async function copyText(text: string | null | undefined, label: string) {
           <!-- 右栏：期望结果集 -->
           <div class="case-part output-part">
             <div class="part-header output-header">
-              <div class="part-title">
-                <span class="part-icon">📤</span>
-                <span>期望查询结果集 (Expected Output)</span>
+              <span class="part-title">期望输出结果</span>
+              <div v-if="grp.expectedOutputRaw" class="part-actions">
+                <button
+                  type="button"
+                  class="btn-tool-sm"
+                  @click="toggleRawOutput(grp.originalIndex)"
+                >
+                  {{ grp.showRawOutput ? '查看表格' : '查看原始数据' }}
+                </button>
+                <button
+                  type="button"
+                  class="btn-tool-sm"
+                  @click="copyText(grp.expectedOutputRaw, `样例 #${grp.originalIndex} 期望结果`)"
+                >
+                  复制结果
+                </button>
               </div>
-              <button
-                v-if="grp.expectedOutputRaw"
-                type="button"
-                class="btn-copy-sm"
-                @click="copyText(grp.expectedOutputRaw, `样例 #${grp.originalIndex} 期望结果`)"
-              >
-                复制期望结果
-              </button>
             </div>
 
             <!-- 表格视图 -->
-            <div v-if="viewMode === 'table' && grp.expectedResult" class="case-tables-list">
+            <div v-if="!grp.showRawOutput && grp.expectedResult" class="case-tables-list">
               <div class="data-grid-card output-grid-card">
                 <div class="grid-card-head output-card-head">
                   <span class="table-name-tag">
-                    <span class="table-icon">▤</span>
-                    <span>查询返回结果集 (Result Set)</span>
+                    <span>查询结果集</span>
                   </span>
                   <span class="row-count-tag mono">共 {{ grp.expectedResult.rows.length }} 行</span>
                 </div>
@@ -247,10 +254,7 @@ async function copyText(text: string | null | undefined, label: string) {
 
             <!-- 未配置期望输出提示 -->
             <div v-else class="empty-expected-box">
-              <div class="empty-note">
-                <span class="empty-icon">ℹ️</span>
-                <span>该样例未显式配置预存结果集表格，评测时系统将在隔离沙箱中运行出题人标准答案并动态比对。</span>
-              </div>
+              <span class="empty-note">（该样例未显式配置预存结果集表格，评测以出题人标准答案为准）</span>
             </div>
           </div>
         </div>
@@ -299,34 +303,6 @@ async function copyText(text: string | null | undefined, label: string) {
   color: var(--ink-secondary);
 }
 
-.view-switch-tabs {
-  display: inline-flex;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  border-radius: 0;
-}
-
-.switch-btn {
-  padding: 3px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  border: none;
-  background: transparent;
-  color: var(--ink-secondary);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.switch-btn:hover {
-  color: var(--ink);
-}
-
-.switch-btn.active {
-  background: var(--button);
-  color: #fff;
-  font-weight: 600;
-}
-
 .samples-body {
   padding: 16px;
   display: flex;
@@ -343,16 +319,9 @@ async function copyText(text: string | null | undefined, label: string) {
 .case-box-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 8px 12px;
   background: var(--bg);
   border-bottom: 1px solid var(--line);
-}
-
-.case-head-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 .case-badge {
@@ -365,14 +334,9 @@ async function copyText(text: string | null | undefined, label: string) {
   font-family: 'SFMono-Regular', Consolas, monospace;
 }
 
-.case-hint {
-  font-size: 12px;
-}
-
 .case-split-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  divide-x: 1px solid var(--line);
 }
 
 @media (max-width: 900px) {
@@ -380,6 +344,7 @@ async function copyText(text: string | null | undefined, label: string) {
     grid-template-columns: 1fr;
   }
   .input-part {
+    border-right: none !important;
     border-bottom: 1px solid var(--line);
   }
 }
@@ -404,19 +369,18 @@ async function copyText(text: string | null | undefined, label: string) {
 }
 
 .part-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   font-size: 12px;
   font-weight: 700;
   color: var(--ink);
 }
 
-.part-icon {
-  font-size: 14px;
+.part-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.btn-copy-sm {
+.btn-tool-sm {
   padding: 2px 8px;
   font-size: 11px;
   border: 1px solid var(--line);
@@ -427,7 +391,7 @@ async function copyText(text: string | null | undefined, label: string) {
   transition: all 0.15s ease;
 }
 
-.btn-copy-sm:hover {
+.btn-tool-sm:hover {
   background: var(--bg);
   color: var(--ink);
   border-color: var(--ink-tertiary);
@@ -468,20 +432,13 @@ async function copyText(text: string | null | undefined, label: string) {
   font-size: 13px;
   font-weight: 600;
   color: var(--ink);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.table-icon {
-  font-size: 13px;
-  color: var(--ink-tertiary);
 }
 
 .table-name-tag code {
   font-size: 13px;
   font-weight: 700;
   color: #1a6f30;
+  font-family: 'SFMono-Regular', Consolas, monospace;
 }
 
 .row-count-tag {
@@ -524,6 +481,7 @@ async function copyText(text: string | null | undefined, label: string) {
   color: #495057;
   font-weight: normal;
   border: 1px solid #ced4da;
+  font-family: 'SFMono-Regular', Consolas, monospace;
 }
 
 .db-data-table td {
@@ -556,6 +514,7 @@ async function copyText(text: string | null | undefined, label: string) {
   color: #868e96;
   border: 1px solid #dee2e6;
   border-radius: 2px;
+  font-family: 'SFMono-Regular', Consolas, monospace;
 }
 
 .empty-rows-cell {
@@ -591,15 +550,8 @@ async function copyText(text: string | null | undefined, label: string) {
 }
 
 .empty-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink-secondary);
+  color: var(--ink-tertiary);
   font-size: 12px;
   line-height: 1.6;
-}
-
-.empty-icon {
-  font-size: 14px;
 }
 </style>
