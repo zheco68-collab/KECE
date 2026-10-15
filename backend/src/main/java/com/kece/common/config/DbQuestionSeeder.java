@@ -199,5 +199,366 @@ public class DbQuestionSeeder {
                                             EMP_SEED_1,
                                             "{\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"VARCHAR\"},{\"name\":\"dept\",\"type\":\"VARCHAR\"},{\"name\":\"salary\",\"type\":\"DECIMAL\"}],\"rows\":[[\"1\",\"Alice\",\"RD\",\"11000.00\"],[\"2\",\"Bob\",\"RD\",\"13200.00\"],[\"3\",\"Cara\",\"HR\",\"9000.00\"]]}",
                                             true),
-                                    new Case(EMP_SEED_2, false))));
+                                    new Case(EMP_SEED_2, false))),
+                    new Seed(
+                            "部门与员工信息联合查询",
+                            """
+                            ## 题目要求
+
+                            编写 SQL，完成针对【部门与员工信息联合查询】的相关查询。
+
+                            ## 数据库表结构
+
+                            ### `dept` 表：
+
+                            | 字段名 | 类型 | 说明 |
+                            | :--- | :--- | :--- |
+                            | `id` | `INT` | 部门主键编号 |
+                            | `dept_name` | `VARCHAR(32)` | 部门名称 |
+
+                            ### `emp` 表：
+
+                            | 字段名 | 类型 | 说明 |
+                            | :--- | :--- | :--- |
+                            | `id` | `INT` | 员工主键编号 |
+                            | `name` | `VARCHAR(32)` | 员工姓名 |
+                            | `dept_id` | `INT` | 所属部门编号（未分配时为 NULL） |
+                            | `salary` | `DECIMAL(10,2)` | 薪资 |
+
+                            ## 查询要求
+
+                            编写 SQL 查询每个员工的 `id`、姓名 `name`、所属部门名称 `dept_name`（如果员工尚未分配部门，则部门名称显示为 NULL）以及薪资 `salary`。
+
+                            结果按员工 `id` **升序**排列。
+                            """,
+                            "SELECT",
+                            """
+                            CREATE TABLE dept (
+                              id INT PRIMARY KEY,
+                              dept_name VARCHAR(32) NOT NULL
+                            );
+
+                            CREATE TABLE emp (
+                              id INT PRIMARY KEY,
+                              name VARCHAR(32) NOT NULL,
+                              dept_id INT,
+                              salary DECIMAL(10,2) NOT NULL
+                            );
+                            """,
+                            "SELECT e.id, e.name, d.dept_name, e.salary FROM emp e LEFT JOIN dept d ON e.dept_id = d.id ORDER BY e.id;",
+                            null,
+                            true,
+                            List.of(
+                                    new Case(
+                                            """
+                                            INSERT INTO dept VALUES (1, '研发部'), (2, '运营部'), (3, '财务部');
+                                            INSERT INTO emp VALUES (1, '张三', 1, 12000.00), (2, '李四', 1, 15000.00), (3, '王五', 2, 9000.00), (4, '赵六', NULL, 8000.00);
+                                            """,
+                                            "{\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"VARCHAR\"},{\"name\":\"dept_name\",\"type\":\"VARCHAR\"},{\"name\":\"salary\",\"type\":\"DECIMAL\"}],\"rows\":[[\"1\",\"张三\",\"研发部\",\"12000.00\"],[\"2\",\"李四\",\"研发部\",\"15000.00\"],[\"3\",\"王五\",\"运营部\",\"9000.00\"],[\"4\",\"赵六\",\"NULL\",\"8000.00\"]]}",
+                                            true),
+                                    new Case(
+                                            """
+                                            INSERT INTO dept VALUES (10, '市场部');
+                                            INSERT INTO emp VALUES (101, 'Alex', NULL, 6000.00), (102, 'Bob', 10, 7500.00), (103, 'Cindy', 99, 8800.00);
+                                            """,
+                                            false))),
+                    new Seed(
+                            "查找人数大于1人的部门",
+                            """
+                            ## 题目要求
+
+                            编写 SQL，完成针对【查找人数大于1人的部门】的相关统计分析。
+
+                            ## 数据库表结构
+
+                            ### `department` 表：
+
+                            | 字段名 | 类型 | 说明 |
+                            | :--- | :--- | :--- |
+                            | `id` | `INT` | 部门主键编号 |
+                            | `name` | `VARCHAR(32)` | 部门名称 |
+
+                            ### `employee` 表：
+
+                            | 字段名 | 类型 | 说明 |
+                            | :--- | :--- | :--- |
+                            | `id` | `INT` | 员工主键编号 |
+                            | `name` | `VARCHAR(32)` | 员工姓名 |
+                            | `department_id` | `INT` | 所属部门编号 |
+
+                            ## 查询要求
+
+                            编写 SQL 查询员工人数大于 1 人的部门名称 `name` 及其对应的员工人数 `emp_count`。
+
+                            结果先按员工人数 `emp_count` **降序**排列；若人数相同，按部门名称 `name` **升序**排列。
+                            """,
+                            "SELECT",
+                            """
+                            CREATE TABLE department (
+                              id INT PRIMARY KEY,
+                              name VARCHAR(32) NOT NULL
+                            );
+
+                            CREATE TABLE employee (
+                              id INT PRIMARY KEY,
+                              name VARCHAR(32) NOT NULL,
+                              department_id INT
+                            );
+                            """,
+                            "SELECT d.name, COUNT(e.id) AS emp_count FROM department d JOIN employee e ON d.id = e.department_id GROUP BY d.id, d.name HAVING COUNT(e.id) > 1 ORDER BY emp_count DESC, d.name ASC;",
+                            null,
+                            true,
+                            List.of(
+                                    new Case(
+                                            """
+                                            INSERT INTO department VALUES (1, '技术部'), (2, '人事部'), (3, '销售部');
+                                            INSERT INTO employee VALUES (1, 'Alice', 1), (2, 'Bob', 1), (3, 'Charlie', 1), (4, 'David', 2), (5, 'Emma', 2), (6, 'Frank', 3);
+                                            """,
+                                            "{\"columns\":[{\"name\":\"name\",\"type\":\"VARCHAR\"},{\"name\":\"emp_count\",\"type\":\"BIGINT\"}],\"rows\":[[\"技术部\",\"3\"],[\"人事部\",\"2\"]]}",
+                                            true),
+                                    new Case(
+                                            """
+                                            INSERT INTO department VALUES (1, 'A'), (2, 'B'), (3, 'C');
+                                            INSERT INTO employee VALUES (1, 'E1', 1), (2, 'E2', 2);
+                                            """,
+                                            false))),
+                    new Seed(
+                            "超过经理收入的员工",
+                            """
+                            ## 题目要求
+
+                            编写 SQL，完成针对【超过经理收入的员工】的查询。
+
+                            ## 数据库表结构
+
+                            ### `Employee` 表：
+
+                            | 字段名 | 类型 | 说明 |
+                            | :--- | :--- | :--- |
+                            | `id` | `INT` | 员工编号主键 |
+                            | `name` | `VARCHAR(32)` | 员工姓名 |
+                            | `salary` | `DECIMAL(10,2)` | 薪水 |
+                            | `manager_id` | `INT` | 其直接经理的编号（无经理为 NULL） |
+
+                            ## 查询要求
+
+                            编写 SQL 查询薪资超过其直接主管的员工姓名 `Employee`（输出列名命名为 `Employee`）。
+
+                            结果对行顺序无敏感要求。
+                            """,
+                            "SELECT",
+                            """
+                            CREATE TABLE Employee (
+                              id INT PRIMARY KEY,
+                              name VARCHAR(32) NOT NULL,
+                              salary DECIMAL(10,2) NOT NULL,
+                              manager_id INT
+                            );
+                            """,
+                            "SELECT e.name AS Employee FROM Employee e JOIN Employee m ON e.manager_id = m.id WHERE e.salary > m.salary;",
+                            null,
+                            false,
+                            List.of(
+                                    new Case(
+                                            "INSERT INTO Employee VALUES (1, 'Joe', 70000.00, 3), (2, 'Henry', 80000.00, 4), (3, 'Sam', 60000.00, NULL), (4, 'Max', 90000.00, NULL);",
+                                            "{\"columns\":[{\"name\":\"Employee\",\"type\":\"VARCHAR\"}],\"rows\":[[\"Joe\"]]}",
+                                            true),
+                                    new Case(
+                                            "INSERT INTO Employee VALUES (1, 'A', 50000.00, 2), (2, 'B', 50000.00, NULL), (3, 'C', 60000.00, 2);",
+                                            false))),
+                    new Seed(
+                            "删除没有员工的空部门",
+                            """
+                            ## 题目要求
+
+                            编写一条数据变更（DML）语句，清理废弃空部门数据。
+
+                            ## 数据库表结构
+
+                            ### `dept` 表：
+
+                            | 字段名 | 类型 | 说明 |
+                            | :--- | :--- | :--- |
+                            | `id` | `INT` | 部门编号主键 |
+                            | `name` | `VARCHAR(32)` | 部门名称 |
+
+                            ### `emp` 表：
+
+                            | 字段名 | 类型 | 说明 |
+                            | :--- | :--- | :--- |
+                            | `id` | `INT` | 员工编号主键 |
+                            | `name` | `VARCHAR(32)` | 员工姓名 |
+                            | `dept_id` | `INT` | 所属部门编号 |
+
+                            ## 操作要求
+
+                            编写一条 `DELETE` 语句，删除 `dept` 表中没有任何员工归属的部门（即该部门的 `id` 未在 `emp` 表的 `dept_id` 中被引用）。
+
+                            ## 判分方式
+
+                            系统在执行你的语句后，将运行 `SELECT id, name FROM dept ORDER BY id;` 查询保留的部门列表进行完整比对。
+                            """,
+                            "DML",
+                            """
+                            CREATE TABLE dept (
+                              id INT PRIMARY KEY,
+                              name VARCHAR(32) NOT NULL
+                            );
+
+                            CREATE TABLE emp (
+                              id INT PRIMARY KEY,
+                              name VARCHAR(32) NOT NULL,
+                              dept_id INT
+                            );
+                            """,
+                            "DELETE FROM dept WHERE id NOT IN (SELECT DISTINCT dept_id FROM emp WHERE dept_id IS NOT NULL);",
+                            "SELECT id, name FROM dept ORDER BY id;",
+                            true,
+                            List.of(
+                                    new Case(
+                                            """
+                                            INSERT INTO dept VALUES (1, '研发部'), (2, '测试部'), (3, '闲置部'), (4, '已撤销部');
+                                            INSERT INTO emp VALUES (1, 'Tom', 1), (2, 'Jerry', 1), (3, 'Spike', 2);
+                                            """,
+                                            "{\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"VARCHAR\"}],\"rows\":[[\"1\",\"研发部\"],[\"2\",\"测试部\"]]}",
+                                            true),
+                                    new Case(
+                                            """
+                                            INSERT INTO dept VALUES (10, 'D1'), (20, 'D2');
+                                            INSERT INTO emp VALUES (1, 'P1', 10), (2, 'P2', 20);
+                                            """,
+                                            false))),
+                    new Seed(
+                            "各个部门薪资最高的员工",
+                            """
+                            ## 题目要求
+
+                            编写 SQL，完成针对【各个部门薪资最高的员工】的分组极值查询。
+
+                            ## 数据库表结构
+
+                            ### `Department` 表：
+
+                            | 字段名 | 类型 | 说明 |
+                            | :--- | :--- | :--- |
+                            | `id` | `INT` | 部门编号主键 |
+                            | `name` | `VARCHAR(32)` | 部门名称 |
+
+                            ### `Employee` 表：
+
+                            | 字段名 | 类型 | 说明 |
+                            | :--- | :--- | :--- |
+                            | `id` | `INT` | 员工编号主键 |
+                            | `name` | `VARCHAR(32)` | 员工姓名 |
+                            | `salary` | `DECIMAL(10,2)` | 薪资 |
+                            | `department_id` | `INT` | 所属部门编号 |
+
+                            ## 查询要求
+
+                            编写 SQL 查询每个部门中薪资最高的员工。
+
+                            返回结果包含三列：部门名称 `Department`、员工姓名 `Employee` 和薪资 `Salary`。如果某个部门中有多名员工并列最高薪资，则他们都应该出现在查询结果中。
+                            """,
+                            "SELECT",
+                            """
+                            CREATE TABLE Department (
+                              id INT PRIMARY KEY,
+                              name VARCHAR(32) NOT NULL
+                            );
+
+                            CREATE TABLE Employee (
+                              id INT PRIMARY KEY,
+                              name VARCHAR(32) NOT NULL,
+                              salary DECIMAL(10,2) NOT NULL,
+                              department_id INT
+                            );
+                            """,
+                            """
+                            SELECT d.name AS Department, e.name AS Employee, e.salary AS Salary
+                            FROM Employee e
+                            JOIN Department d ON e.department_id = d.id
+                            WHERE (e.department_id, e.salary) IN (
+                                SELECT department_id, MAX(salary)
+                                FROM Employee
+                                GROUP BY department_id
+                            );
+                            """,
+                            null,
+                            false,
+                            List.of(
+                                    new Case(
+                                            """
+                                            INSERT INTO Department VALUES (1, 'IT'), (2, 'Sales');
+                                            INSERT INTO Employee VALUES (1, 'Joe', 85000.00, 1), (2, 'Henry', 80000.00, 2), (3, 'Sam', 60000.00, 2), (4, 'Max', 90000.00, 1), (5, 'Janet', 69000.00, 1), (6, 'Randy', 85000.00, 1);
+                                            """,
+                                            "{\"columns\":[{\"name\":\"Department\",\"type\":\"VARCHAR\"},{\"name\":\"Employee\",\"type\":\"VARCHAR\"},{\"name\":\"Salary\",\"type\":\"DECIMAL\"}],\"rows\":[[\"IT\",\"Max\",\"90000.00\"],[\"Sales\",\"Henry\",\"80000.00\"]]}",
+                                            true),
+                                    new Case(
+                                            """
+                                            INSERT INTO Department VALUES (1, 'HR');
+                                            INSERT INTO Employee VALUES (1, 'A', 10000.00, 1), (2, 'B', 10000.00, 1);
+                                            """,
+                                            false))),
+                    new Seed(
+                            "合格候选人录入员工表",
+                            """
+                            ## 题目要求
+
+                            编写一条数据插入（DML INSERT）语句，将考核合格的候选人批量归档至新员工表中。
+
+                            ## 数据库表结构
+
+                            ### `candidates` 表：
+
+                            | 字段名 | 类型 | 说明 |
+                            | :--- | :--- | :--- |
+                            | `id` | `INT` | 候选人编号主键 |
+                            | `name` | `VARCHAR(32)` | 姓名 |
+                            | `score` | `INT` | 综合考核分数 |
+                            | `dept` | `VARCHAR(16)` | 拟录用部门 |
+
+                            ### `new_hires` 表：
+
+                            | 字段名 | 类型 | 说明 |
+                            | :--- | :--- | :--- |
+                            | `id` | `INT` | 员工编号主键 |
+                            | `name` | `VARCHAR(32)` | 姓名 |
+                            | `dept` | `VARCHAR(16)` | 录用部门 |
+                            | `salary` | `DECIMAL(10,2)` | 初始月薪 |
+
+                            ## 操作要求
+
+                            编写一条 `INSERT INTO ... SELECT` 语句，将所有考核分数大于等于 80 分（`score >= 80`）的候选人录入 `new_hires` 表，其月薪 `salary` 统一设定为 `9000.00`。
+
+                            ## 判分方式
+
+                            系统执行你的语句后，将运行 `SELECT id, name, dept, salary FROM new_hires ORDER BY id;` 进行整表核对。
+                            """,
+                            "DML",
+                            """
+                            CREATE TABLE candidates (
+                              id INT PRIMARY KEY,
+                              name VARCHAR(32) NOT NULL,
+                              score INT NOT NULL,
+                              dept VARCHAR(16) NOT NULL
+                            );
+
+                            CREATE TABLE new_hires (
+                              id INT PRIMARY KEY,
+                              name VARCHAR(32) NOT NULL,
+                              dept VARCHAR(16) NOT NULL,
+                              salary DECIMAL(10,2) NOT NULL
+                            );
+                            """,
+                            "INSERT INTO new_hires (id, name, dept, salary) SELECT id, name, dept, 9000.00 FROM candidates WHERE score >= 80;",
+                            "SELECT id, name, dept, salary FROM new_hires ORDER BY id;",
+                            true,
+                            List.of(
+                                    new Case(
+                                            "INSERT INTO candidates VALUES (101, 'Kevin', 85, 'Dev'), (102, 'Lucy', 72, 'Dev'), (103, 'Mike', 92, 'QA'), (104, 'Nancy', 60, 'HR');",
+                                            "{\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"VARCHAR\"},{\"name\":\"dept\",\"type\":\"VARCHAR\"},{\"name\":\"salary\",\"type\":\"DECIMAL\"}],\"rows\":[[\"101\",\"Kevin\",\"Dev\",\"9000.00\"],[\"103\",\"Mike\",\"QA\",\"9000.00\"]]}",
+                                            true),
+                                    new Case(
+                                            "INSERT INTO candidates VALUES (201, 'P1', 79, 'Ops'), (202, 'P2', 80, 'Ops');",
+                                            false)))));
 }
