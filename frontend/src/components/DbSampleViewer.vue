@@ -40,19 +40,21 @@ interface ParsedCaseGroup {
 const rawToggles = ref<Record<number, { seed: boolean; output: boolean }>>({})
 
 const parsedCases = computed<ParsedCaseGroup[]>(() => {
-  return props.sampleCases.map((c, idx) => {
-    const caseIdx = idx + 1
-    const toggles = rawToggles.value[caseIdx] || { seed: false, output: false }
-    return {
-      originalIndex: caseIdx,
-      seedSql: c.seedSql,
-      tables: parseSeedSql(c.seedSql, schemas.value),
-      expectedOutputRaw: c.expectedOutput ?? null,
-      expectedResult: parseExpectedOutput(c.expectedOutput),
-      showRawSeed: toggles.seed,
-      showRawOutput: toggles.output,
-    }
-  })
+  return props.sampleCases
+    .filter((c) => c.isSample === undefined || c.isSample === 1)
+    .map((c, idx) => {
+      const caseIdx = idx + 1
+      const toggles = rawToggles.value[caseIdx] || { seed: false, output: false }
+      return {
+        originalIndex: caseIdx,
+        seedSql: c.seedSql,
+        tables: parseSeedSql(c.seedSql, schemas.value),
+        expectedOutputRaw: c.expectedOutput ?? null,
+        expectedResult: parseExpectedOutput(c.expectedOutput),
+        showRawSeed: toggles.seed,
+        showRawOutput: toggles.output,
+      }
+    })
 })
 
 function toggleRawSeed(caseIdx: number) {
@@ -85,7 +87,7 @@ async function copyText(text: string | null | undefined, label: string) {
     <div class="sample-header">
       <div class="header-left">
         <span class="sec-title">样例测试数据</span>
-        <span class="sample-count-badge">共 {{ sampleCases.length }} 组公开样例</span>
+        <span class="sample-count-badge">共 {{ parsedCases.length }} 组公开样例</span>
       </div>
     </div>
 
@@ -254,7 +256,7 @@ async function copyText(text: string | null | undefined, label: string) {
 
             <!-- 未配置期望输出提示 -->
             <div v-else class="empty-expected-box">
-              <span class="empty-note">（该样例未显式配置预存结果集表格，评测以出题人标准答案为准）</span>
+              <span class="empty-note">暂无预存期望结果集表格（判题将以出题人标准 SQL 动态运行结果为准）</span>
             </div>
           </div>
         </div>
@@ -466,7 +468,7 @@ async function copyText(text: string | null | undefined, label: string) {
   background: #fdfdfd;
   color: var(--ink);
   font-weight: 700;
-  padding: 8px 12px;
+  padding: 6px 10px;
   text-align: left;
   border-bottom: 1.5px solid var(--line);
   border-right: 1px solid #f0f0f0;
@@ -474,18 +476,18 @@ async function copyText(text: string | null | undefined, label: string) {
 }
 
 .col-type-tag {
-  margin-left: 6px;
-  font-size: 10px;
-  padding: 1px 4px;
+  margin-left: 4px;
+  font-size: 9px;
+  padding: 0 3px;
   background: #eef2f6;
   color: #495057;
-  font-weight: normal;
+  font-weight: 500;
   border: 1px solid #ced4da;
   font-family: 'SFMono-Regular', Consolas, monospace;
 }
 
 .db-data-table td {
-  padding: 7px 12px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--line);
   border-right: 1px solid #f0f0f0;
   color: var(--ink);

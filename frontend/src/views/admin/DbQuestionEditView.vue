@@ -75,13 +75,13 @@ function removeSeed(clientId: number) {
 
 const sampleCasesList = computed(() => {
   return seeds.value
-    .filter((s) => s.seedSql.trim())
+    .filter((s) => s.isSample && s.seedSql.trim())
     .map((s, idx) => ({
       id: s.clientId,
       caseOrder: idx + 1,
       seedSql: s.seedSql,
       expectedOutput: s.expectedOutput,
-      isSample: s.isSample ? 1 : 0,
+      isSample: 1,
     }))
 })
 
@@ -384,12 +384,10 @@ onMounted(() => {
 
         <div v-if="showLivePreview" class="preview-content">
           <div v-if="form.schemaSql.trim()" class="preview-item">
-            <div class="preview-label">数据库表结构渲染预览：</div>
             <DbSchemaViewer compact :schema-sql="form.schemaSql" />
           </div>
 
           <div v-if="sampleCasesList.length > 0 && form.schemaSql.trim()" class="preview-item">
-            <div class="preview-label">样例数据与期望结果预览：</div>
             <DbSampleViewer :sample-cases="sampleCasesList" :schema-sql="form.schemaSql" />
           </div>
         </div>
