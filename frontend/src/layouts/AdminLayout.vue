@@ -46,7 +46,7 @@ function logout() {
     <aside class="admin-sidebar">
       <div class="sidebar-header">
         <RouterLink to="/" class="brand-link" title="返回前台首页">
-          <img src="/KECElogo浅色版-trim.png" alt="KECE 课测" class="brand-logo" />
+          <img src="/kece-logo.png" alt="KECE 课测" class="brand-logo" />
         </RouterLink>
         <div class="console-tag">CONSOLE</div>
       </div>

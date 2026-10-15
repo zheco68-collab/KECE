@@ -31,6 +31,7 @@ public class WebConfig implements WebMvcConfigurer {
             uploadDir += "/";
         }
         registry.addResourceHandler("/uploads/**").addResourceLocations(uploadDir);
+        registry.addResourceHandler("/avatars/**").addResourceLocations(uploadDir + "avatars/");
     }
 
     @Bean

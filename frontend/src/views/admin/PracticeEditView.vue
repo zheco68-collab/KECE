@@ -35,6 +35,7 @@ interface SelectedItem {
 
 const selected = ref<SelectedItem[]>([])
 const formErrors = reactive({ title: '', questions: '' })
+const titleInputRef = ref<HTMLInputElement | null>(null)
 
 // ---- 题库选取 ----
 type PickTab = 'ALGO' | 'DB' | 'OBJECTIVE'
@@ -123,10 +124,29 @@ const totalScore = computed(() =>
 async function save() {
   formErrors.title = form.title.trim() ? '' : '请填写课练标题'
   formErrors.questions = selected.value.length > 0 ? '' : '请至少选择一道题目'
-  if (formErrors.title || formErrors.questions) return
+
+  if (formErrors.title) {
+    toast.error('请填写课练标题')
+    titleInputRef.value?.focus()
+    titleInputRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    return
+  }
+
+  if (formErrors.questions) {
+    toast.error(formErrors.questions)
+    return
+  }
+
+  if (!form.durationMinutes || form.durationMinutes < 5 || form.durationMinutes > 300) {
+    const msg = '课上时长需在 5 至 300 分钟之间'
+    pageError.value = msg
+    toast.error(msg)
+    return
+  }
 
   if (selected.value.some((s) => !s.score || s.score <= 0)) {
     formErrors.questions = '每题分值需大于 0'
+    toast.error('每题分值需大于 0，请检查已选题目分值')
     return
   }
 
@@ -151,7 +171,14 @@ async function save() {
     toast.success(`课堂练习发起成功！6 位上机口令：${res.accessCode}`)
     router.push('/admin/practices')
   } catch (e) {
-    pageError.value = e instanceof ApiError ? e.message : '发起课练失败，请重试'
+    const errorMsg =
+      e instanceof ApiError
+        ? e.message
+        : e instanceof Error
+          ? e.message
+          : '发起课练失败，请重试'
+    pageError.value = errorMsg
+    toast.error(errorMsg)
   } finally {
     submitting.value = false
   }
@@ -171,6 +198,7 @@ onMounted(loadSource)
     <div class="form card">
       <FormField label="练习标题" :error="formErrors.title">
         <input
+          ref="titleInputRef"
           v-model="form.title"
           class="input"
           type="text"
@@ -296,12 +324,17 @@ onMounted(loadSource)
 
     <!-- 底部操作按钮 -->
     <div class="actions">
-      <button class="btn btn-ghost" type="button" @click="router.push('/admin/practices')">
-        取消
-      </button>
-      <button class="btn btn-primary" type="button" :disabled="submitting" @click="save">
-        {{ submitting ? '生成口令中…' : '发起课堂练习并生成口令 →' }}
-      </button>
+      <p v-if="pageError || formErrors.title || formErrors.questions" class="action-error-hint">
+        ⚠ {{ pageError || formErrors.title || formErrors.questions }}
+      </p>
+      <div class="action-buttons">
+        <button class="btn btn-ghost" type="button" @click="router.push('/admin/practices')">
+          取消
+        </button>
+        <button class="btn btn-primary" type="button" :disabled="submitting" @click="save">
+          {{ submitting ? '生成口令中…' : '发起课堂练习并生成口令 →' }}
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -467,9 +500,27 @@ onMounted(loadSource)
 
 .actions {
   display: flex;
-  justify-content: flex-end;
-  gap: 10px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
   padding-bottom: 40px;
+}
+
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.action-error-hint {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13.5px;
+  font-weight: 500;
+  background: var(--danger-bg);
+  padding: 6px 14px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
 }
 
 .btn-icon {

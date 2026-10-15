@@ -79,14 +79,14 @@ function handleInputCode(e: Event) {
   inputCode.value = target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
 }
 
-// 点击未加入的课练卡片，打开专属口令输入弹窗
+// 点击课练卡片：已加入则直接进入，未加入且进行中则打开专属口令输入弹窗
 function openJoinModal(p: PracticeSummary) {
-  if (p.status === 'ENDED') {
-    toastError('该课练已截止收卷，无法加入')
-    return
-  }
   if (p.myJoined && p.accessCode) {
     router.push(`/practice/${p.accessCode}`)
+    return
+  }
+  if (p.status === 'ENDED') {
+    toastError('该课练已截止收卷，无法加入')
     return
   }
   if (!userStore.isLoggedIn) {
@@ -240,18 +240,19 @@ onMounted(() => {
             <h2
               class="practice-title"
               :class="{ 'is-ended': p.status === 'ENDED' }"
-              @click="p.status !== 'ENDED' && openJoinModal(p)"
+              @click="openJoinModal(p)"
             >
-              <!-- 已加入则显示真实口令，未加入则显示受保护标识，杜绝明文泄露 -->
-              <span v-if="p.myJoined && p.accessCode" class="code-pill mono">
-                {{ p.accessCode }}
-              </span>
-              <span v-else-if="isTeacherOrAdmin && p.accessCode" class="code-pill mono" title="教师/管理员口令快览">
-                {{ p.accessCode }}
+              <!-- 课练访问凭证状态标识：已解锁 vs 需口令（保护课堂私密性，大厅绝不明文暴露 6 位口令） -->
+              <span v-if="p.myJoined" class="code-unlocked-pill" title="已输入口令解锁，点击可直接进入">
+                <svg class="inline-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <rect x="3" y="11" width="18" height="11" />
+                  <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                </svg>
+                <span>已解锁</span>
               </span>
               <span v-else class="code-lock-pill" title="该课练受课堂口令保护，需输入口令进入">
                 <svg class="inline-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                  <rect x="3" y="11" width="18" height="11" rx="0" ry="0" />
+                  <rect x="3" y="11" width="18" height="11" />
                   <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                 </svg>
                 <span>需口令</span>
@@ -269,7 +270,7 @@ onMounted(() => {
                 {{ p.status === 'ACTIVE' ? '进行中' : '已归档' }}
               </span>
               <span v-if="p.myJoined" class="badge badge-joined">
-                已解锁 · {{ p.myScore ?? 0 }} 分
+                已参练 · {{ p.myScore ?? 0 }} 分
               </span>
               <span v-if="p.mySubmitted" class="badge badge-submitted">
                 已交卷
@@ -315,9 +316,22 @@ onMounted(() => {
             课练数据 ↗
           </button>
 
-          <!-- 已结束课练：大厅禁止点击进入，仅显示已结束标签（仅教师/管理员可在后台管理点进） -->
+          <!-- 已结束课练：已加入用户可进入复盘回顾，未加入者不可再加入 -->
           <template v-if="p.status === 'ENDED'">
             <button
+              v-if="p.myJoined && p.accessCode"
+              class="btn btn-secondary btn-sm btn-enter"
+              type="button"
+              @click="router.push(`/practice/${p.accessCode}`)"
+            >
+              <span>查看回顾</span>
+              <svg class="cta-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
+            </button>
+            <button
+              v-else
               class="btn btn-ghost btn-sm btn-ended"
               disabled
               type="button"
@@ -628,13 +642,16 @@ onMounted(() => {
   text-decoration: underline;
 }
 
-.code-pill {
-  padding: 2px 7px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 1px;
-  background: var(--ink);
-  color: #ffffff;
+.code-unlocked-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: #ebfbee;
+  color: #2b8a3e;
+  border: 1px solid rgba(43, 138, 62, 0.3);
   border-radius: var(--radius);
   flex-shrink: 0;
 }

@@ -5,7 +5,7 @@ import { practiceApi } from '@/api/practice'
 import { questionApi } from '@/api/question'
 import { renderMarkdown } from '@/utils/markdown'
 import { useToast } from '@/composables/useToast'
-import type { Difficulty, Question, TestCase } from '@/types'
+import type { Difficulty, Question } from '@/types'
 import type { PracticeDetail, PracticePracticalQuestion } from '@/types/practice'
 import { copyToClipboard } from '@/utils/clipboard'
 
@@ -19,7 +19,6 @@ const practiceQuestionId = computed(() => Number(route.params.id))
 const practiceDetail = ref<PracticeDetail | null>(null)
 const practiceQuestion = ref<PracticePracticalQuestion | null>(null)
 const question = ref<Question | null>(null)
-const testCases = ref<TestCase[]>([])
 const loading = ref(true)
 const error = ref('')
 
@@ -33,9 +32,7 @@ const difficultyLabels: Record<Difficulty, string> = {
 
 const descriptionHtml = computed(() => renderMarkdown(question.value?.description ?? ''))
 
-const sampleTestCases = computed(() =>
-  testCases.value.filter((tc) => tc.isSample === 1),
-)
+const sampleTestCases = computed(() => question.value?.sampleTestCases ?? [])
 
 async function copyText(text: string | null | undefined, label: string) {
   if (!text) return
@@ -73,12 +70,7 @@ onMounted(async () => {
     }
     practiceQuestion.value = pq
 
-    const [qData, tcData] = await Promise.all([
-      questionApi.detail(pq.questionId),
-      questionApi.listTestCases(pq.questionId),
-    ])
-    question.value = qData
-    testCases.value = tcData
+    question.value = await questionApi.detail(pq.questionId)
   } catch (e) {
     error.value = e instanceof Error ? e.message : '加载题目失败'
   } finally {

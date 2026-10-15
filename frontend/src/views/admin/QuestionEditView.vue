@@ -23,6 +23,56 @@ const submitting = ref(false)
 const loading = ref(false)
 const pageError = ref('')
 
+interface JudgerOption {
+  key: string
+  label: string
+  desc: string
+  badge: string
+}
+
+const JUDGER_OPTIONS: JudgerOption[] = [
+  { key: 'cpp', label: 'C++', desc: 'GCC 13 · C++17 强隔离沙箱', badge: 'GCC 13' },
+  { key: 'java', label: 'Java', desc: 'Eclipse Temurin 17 (JDK 17)', badge: 'JDK 17' },
+  { key: 'python', label: 'Python', desc: 'Python 3.12 解释器', badge: 'Py 3.12' },
+  { key: 'arkts', label: 'ArkTS', desc: 'Node / TSC 鸿蒙 ArkTS 沙箱', badge: 'TS 2022' },
+]
+
+const selectedLanguages = ref<string[]>(['cpp', 'java', 'python', 'arkts'])
+
+const allJudgerOptions = computed(() => {
+  const list = [...JUDGER_OPTIONS]
+  for (const lang of selectedLanguages.value) {
+    if (!list.some((o) => o.key === lang)) {
+      list.push({
+        key: lang,
+        label: lang.toUpperCase(),
+        desc: '自定义沙箱评测环境',
+        badge: lang,
+      })
+    }
+  }
+  return list
+})
+
+function selectAllJudgers() {
+  selectedLanguages.value = allJudgerOptions.value.map((o) => o.key)
+  formErrors.languages = ''
+}
+
+function selectClassicJudgers() {
+  selectedLanguages.value = ['cpp', 'java', 'python']
+  formErrors.languages = ''
+}
+
+function selectArktsOnly() {
+  selectedLanguages.value = ['arkts']
+  formErrors.languages = ''
+}
+
+function clearJudgers() {
+  selectedLanguages.value = []
+}
+
 const form = reactive({
   title: '',
   description: '',
@@ -30,7 +80,6 @@ const form = reactive({
   status: 1,
   timeLimit: 1000,
   memoryLimit: 256,
-  languages: 'cpp,java,python',
 })
 
 const formErrors = reactive({
@@ -38,6 +87,7 @@ const formErrors = reactive({
   description: '',
   timeLimit: '',
   memoryLimit: '',
+  languages: '',
 })
 
 /** 测试用例：clientId 区分本地条目，id 存在表示后端已有记录。 */
@@ -76,7 +126,11 @@ async function loadQuestion() {
     form.status = q.status
     form.timeLimit = q.timeLimit ?? 1000
     form.memoryLimit = q.memoryLimit ?? 256
-    form.languages = q.languages.join(',')
+    if (Array.isArray(q.languages) && q.languages.length > 0) {
+      selectedLanguages.value = [...q.languages]
+    } else {
+      selectedLanguages.value = ['cpp', 'java', 'python', 'arkts']
+    }
     const testCases = await questionApi.listTestCases(questionId.value)
     cases.value = testCases.map((tc) => ({
       clientId: ++caseSeq,
@@ -99,12 +153,23 @@ function validate(): boolean {
   formErrors.timeLimit = t >= 1 && t <= 60000 ? '' : '时间限制需在 1-60000 毫秒之间'
   const m = form.memoryLimit
   formErrors.memoryLimit = m >= 1 && m <= 4096 ? '' : '内存限制需在 1-4096 MB 之间'
+  formErrors.languages = selectedLanguages.value.length > 0 ? '' : '请至少勾选一种评测机语言'
+  if (selectedLanguages.value.length === 0) {
+    toast.error('请至少勾选一种支持的评测机语言')
+    return false
+  }
   const badCase = cases.value.find((c) => !c.expectedOutput.trim())
   if (badCase) {
     toast.error('测试用例的期望输出不能为空')
     return false
   }
-  return !formErrors.title && !formErrors.description && !formErrors.timeLimit && !formErrors.memoryLimit
+  return (
+    !formErrors.title &&
+    !formErrors.description &&
+    !formErrors.timeLimit &&
+    !formErrors.memoryLimit &&
+    !formErrors.languages
+  )
 }
 
 async function save() {
@@ -119,7 +184,7 @@ async function save() {
       status: form.status,
       timeLimit: form.timeLimit,
       memoryLimit: form.memoryLimit,
-      languages: form.languages.trim(),
+      languages: selectedLanguages.value.join(','),
     }
     let targetId: number
     if (questionId.value) {
@@ -198,8 +263,49 @@ onMounted(() => {
             <input v-model.number="form.memoryLimit" class="input" type="number" min="1" max="4096" />
           </FormField>
         </div>
-        <FormField label="支持语言" hint="逗号分隔，如 cpp,java,python,arkts">
-          <input v-model="form.languages" class="input" placeholder="cpp,java,python,arkts" />
+        <FormField
+          label="测评机选择"
+          required
+          :error="formErrors.languages"
+          hint="多选勾选本题允许提交与执行评测的语言沙箱"
+        >
+          <div class="judger-select-box">
+            <div class="judger-toolbar">
+              <span class="judger-count">
+                已启用 <b>{{ selectedLanguages.length }}</b> / {{ allJudgerOptions.length }} 个评测机
+              </span>
+              <div class="judger-presets">
+                <button type="button" class="btn-preset" @click="selectAllJudgers">全选</button>
+                <button type="button" class="btn-preset" @click="selectClassicJudgers">常用 (C++/Java/Python)</button>
+                <button type="button" class="btn-preset" @click="selectArktsOnly">仅 ArkTS</button>
+                <button type="button" class="btn-preset btn-preset-danger" @click="clearJudgers">清空</button>
+              </div>
+            </div>
+
+            <div class="judger-grid">
+              <label
+                v-for="opt in allJudgerOptions"
+                :key="opt.key"
+                class="judger-card"
+                :class="{ active: selectedLanguages.includes(opt.key) }"
+              >
+                <input
+                  v-model="selectedLanguages"
+                  type="checkbox"
+                  class="judger-checkbox"
+                  :value="opt.key"
+                  @change="formErrors.languages = ''"
+                />
+                <div class="judger-body">
+                  <div class="judger-title-row">
+                    <span class="judger-name">{{ opt.label }}</span>
+                    <span class="judger-badge">{{ opt.badge }}</span>
+                  </div>
+                  <span class="judger-desc">{{ opt.desc }}</span>
+                </div>
+              </label>
+            </div>
+          </div>
         </FormField>
       </div>
 
@@ -320,5 +426,124 @@ onMounted(() => {
 .form-actions {
   display: flex;
   gap: 12px;
+}
+
+/* 测评机多选卡片样式 */
+.judger-select-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.judger-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.judger-count {
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+.judger-count b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.judger-presets {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.btn-preset {
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  border-radius: var(--pill);
+  transition: all 0.15s ease;
+}
+.btn-preset:hover {
+  background: var(--button);
+  color: #fff;
+  border-color: var(--button);
+}
+.btn-preset-danger:hover {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+.judger-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+.judger-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+.judger-card:hover {
+  border-color: var(--ink-tertiary);
+}
+.judger-card.active {
+  border-color: var(--button);
+  background: #fdfdfd;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+.judger-checkbox {
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--button);
+  cursor: pointer;
+}
+.judger-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.judger-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.judger-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.judger-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--ink-secondary);
+  font-family: 'SFMono-Regular', Consolas, monospace;
+}
+.judger-card.active .judger-badge {
+  background: var(--button);
+  color: #fff;
+  border-color: var(--button);
+}
+.judger-desc {
+  font-size: 12px;
+  color: var(--ink-tertiary);
+  line-height: 1.3;
 }
 </style>

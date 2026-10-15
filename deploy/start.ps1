@@ -1,4 +1,4 @@
-﻿# KECE 本地开发启动器 (Windows PowerShell)
+# KECE 本地开发启动器 (Windows PowerShell)
 #
 # 不再 docker compose 起整套容器：复用已在运行的原生 MySQL(3306) 与 judge-mysql/redis 容器，
 # 在后台拉起后端(mvnw)/判题机(judger.exe)/前端(npm run dev)三个本地进程，日志写入仓库 .logs/。
@@ -69,8 +69,8 @@ if (Get-Process -Name judger -ErrorAction SilentlyContinue) {
 # ---- 3. 后端 ----
 if (Test-Port 8080) {
     Write-Host "后端已在运行 (8080)，跳过" -ForegroundColor Yellow
-} else {
-    Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$RootDir\backend\mvnw.cmd`" spring-boot:run" `
+    $BackendCmd = "set JAVA_HOME=$env:JAVA_HOME&& set PATH=$env:JAVA_HOME\bin;%PATH%&& call `"$RootDir\backend\mvnw.cmd`" spring-boot:run"
+    Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$BackendCmd`"" `
       -WorkingDirectory "$RootDir\backend" `
       -RedirectStandardOutput (Join-Path $LogDir "backend.log") `
       -RedirectStandardError  (Join-Path $LogDir "backend.err.log") -WindowStyle Hidden

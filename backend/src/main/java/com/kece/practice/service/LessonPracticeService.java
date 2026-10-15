@@ -200,8 +200,9 @@ public class LessonPracticeService {
                                                     || currentUser
                                                             .getRoles()
                                                             .contains("TEACHER"))));
-            if (!isTeacherOrAdmin) {
-                throw new BusinessException(ResultCode.PARAM_ERROR, "该课练已结束，无法进入");
+            boolean isJoined = myMember != null;
+            if (!isTeacherOrAdmin && !isJoined) {
+                throw new BusinessException(ResultCode.PARAM_ERROR, "该课练已结束，未参练人员无法进入");
             }
         }
         List<LessonPracticeQuestion> allQuestions =
@@ -213,6 +214,7 @@ public class LessonPracticeService {
 
         Map<Long, LessonPracticeSubmission> subMap =
                 mySubmissions.stream()
+                        .filter(s -> s.getPracticeQuestionId() != null)
                         .collect(
                                 Collectors.toMap(
                                         LessonPracticeSubmission::getPracticeQuestionId,
@@ -271,7 +273,8 @@ public class LessonPracticeService {
                                                 : 262144)
                                 .languages(langs)
                                 .userStatus(sub != null ? sub.getStatus() : "UNATTEMPTED")
-                                .userScore(sub != null ? sub.getScore() : 0)
+                                .userScore(
+                                        sub != null && sub.getScore() != null ? sub.getScore() : 0)
                                 .submissionId(sub != null ? sub.getSubmissionId() : null)
                                 .build());
             } else if ("DB".equals(pq.getQuestionType())) {
@@ -290,7 +293,8 @@ public class LessonPracticeService {
                                 .memoryLimitKb(262144)
                                 .languages(List.of("sql"))
                                 .userStatus(sub != null ? sub.getStatus() : "UNATTEMPTED")
-                                .userScore(sub != null ? sub.getScore() : 0)
+                                .userScore(
+                                        sub != null && sub.getScore() != null ? sub.getScore() : 0)
                                 .submissionId(sub != null ? sub.getSubmissionId() : null)
                                 .build());
             }
@@ -310,9 +314,15 @@ public class LessonPracticeService {
                 .endTime(practice.getEndTime())
                 .remainingSeconds(remainingSeconds)
                 .myJoined(myMember != null)
-                .myScore(myMember != null ? myMember.getTotalScore() : 0)
-                .mySolvedCount(myMember != null ? myMember.getSolvedCount() : 0)
-                .mySubmitted(myMember != null && myMember.getSubmitted() == 1)
+                .myScore(
+                        myMember != null && myMember.getTotalScore() != null
+                                ? myMember.getTotalScore()
+                                : 0)
+                .mySolvedCount(
+                        myMember != null && myMember.getSolvedCount() != null
+                                ? myMember.getSolvedCount()
+                                : 0)
+                .mySubmitted(myMember != null && Integer.valueOf(1).equals(myMember.getSubmitted()))
                 .objectiveQuestions(objectiveList)
                 .practicalQuestions(practicalList)
                 .build();

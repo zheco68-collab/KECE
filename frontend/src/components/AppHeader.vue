@@ -74,7 +74,7 @@ function logout() {
   <header class="app-header">
     <div class="header-inner container">
       <RouterLink to="/" class="brand" title="KECE 课测">
-        <img class="brand-logo" src="/KECElogo浅色版-trim.png" alt="KECE 课测" />
+        <img class="brand-logo" src="/kece-logo.png" alt="KECE 课测" />
       </RouterLink>
       <nav ref="navRef" class="nav" @mouseleave="onNavMouseLeave">
         <div
