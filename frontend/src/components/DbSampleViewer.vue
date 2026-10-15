@@ -3,7 +3,9 @@ import { computed, ref } from 'vue'
 import {
   parseSchemaSql,
   parseSeedSql,
+  parseExpectedOutput,
   type ParsedSeedTable,
+  type ParsedResultSet,
 } from '@/utils/sqlSchemaParser'
 import { copyToClipboard } from '@/utils/clipboard'
 import { useToast } from '@/composables/useToast'
@@ -12,6 +14,7 @@ interface SampleCaseItem {
   id?: number
   caseOrder?: number
   seedSql: string
+  expectedOutput?: string | null
   isSample?: number
 }
 
@@ -29,6 +32,8 @@ interface ParsedCaseGroup {
   originalIndex: number
   seedSql: string
   tables: ParsedSeedTable[]
+  expectedOutputRaw: string | null
+  expectedResult: ParsedResultSet | null
 }
 
 const parsedCases = computed<ParsedCaseGroup[]>(() => {
@@ -36,10 +41,12 @@ const parsedCases = computed<ParsedCaseGroup[]>(() => {
     originalIndex: idx + 1,
     seedSql: c.seedSql,
     tables: parseSeedSql(c.seedSql, schemas.value),
+    expectedOutputRaw: c.expectedOutput ?? null,
+    expectedResult: parseExpectedOutput(c.expectedOutput),
   }))
 })
 
-async function copySeedSql(text: string, label: string) {
+async function copyText(text: string | null | undefined, label: string) {
   if (!text) return
   const ok = await copyToClipboard(text)
   if (ok) {
@@ -54,7 +61,7 @@ async function copySeedSql(text: string, label: string) {
   <div class="db-sample-viewer card">
     <div class="sample-header">
       <div class="header-left">
-        <span class="sec-title">样例初始数据 (Seed Data)</span>
+        <span class="sec-title">样例数据与期望结果 (Samples & Output)</span>
         <span class="sample-count-badge">共 {{ sampleCases.length }} 组公开样例</span>
       </div>
 
@@ -75,7 +82,7 @@ async function copySeedSql(text: string, label: string) {
             :class="{ active: viewMode === 'raw' }"
             @click="viewMode = 'raw'"
           >
-            ⌨️ 插入 SQL
+            ⌨️ 原始文本
           </button>
         </div>
       </div>
@@ -91,68 +98,161 @@ async function copySeedSql(text: string, label: string) {
         <div class="case-box-head">
           <div class="case-head-left">
             <span class="case-badge">样例 #{{ grp.originalIndex }}</span>
-            <span class="case-hint muted">输入数据表结构如下：</span>
-          </div>
-          <button
-            type="button"
-            class="btn-copy-sm"
-            @click="copySeedSql(grp.seedSql, `样例 #${grp.originalIndex} 初始数据`)"
-          >
-            复制初始 SQL
-          </button>
-        </div>
-
-        <!-- 1. 表格视图 -->
-        <div v-if="viewMode === 'table' && grp.tables.length > 0" class="case-tables-list">
-          <div
-            v-for="(tbl, tIdx) in grp.tables"
-            :key="tIdx"
-            class="data-grid-card"
-          >
-            <div class="grid-card-head">
-              <span class="table-name-tag">
-                <span class="table-icon">▦</span>
-                <code>{{ tbl.tableName }}</code> 表
-              </span>
-              <span class="row-count-tag mono">共 {{ tbl.rows.length }} 条记录</span>
-            </div>
-
-            <div class="grid-table-scroll">
-              <table class="db-data-table">
-                <thead>
-                  <tr>
-                    <th class="th-index">#</th>
-                    <th
-                      v-for="col in tbl.columns"
-                      :key="col"
-                      class="th-col mono"
-                    >
-                      {{ col }}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(row, rIdx) in tbl.rows" :key="rIdx">
-                    <td class="td-index mono">{{ rIdx + 1 }}</td>
-                    <td
-                      v-for="(val, cIdx) in row"
-                      :key="cIdx"
-                      class="td-val mono"
-                      :class="{ 'is-null': val === 'NULL' }"
-                    >
-                      <span v-if="val === 'NULL'" class="null-pill">NULL</span>
-                      <span v-else>{{ val }}</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <span class="case-hint muted">输入初始数据与期望查询结果集对照</span>
           </div>
         </div>
 
-        <!-- 2. 原始 SQL 视图（或无数据回退） -->
-        <div v-else class="raw-sql-box">
-          <pre class="sql-code">{{ grp.seedSql }}</pre>
+        <div class="case-split-grid">
+          <!-- 左栏：输入数据 -->
+          <div class="case-part input-part">
+            <div class="part-header">
+              <div class="part-title">
+                <span class="part-icon">📥</span>
+                <span>输入数据表 (Input Seed)</span>
+              </div>
+              <button
+                type="button"
+                class="btn-copy-sm"
+                @click="copyText(grp.seedSql, `样例 #${grp.originalIndex} 初始数据`)"
+              >
+                复制初始 SQL
+              </button>
+            </div>
+
+            <!-- 1. 表格视图 -->
+            <div v-if="viewMode === 'table' && grp.tables.length > 0" class="case-tables-list">
+              <div
+                v-for="(tbl, tIdx) in grp.tables"
+                :key="tIdx"
+                class="data-grid-card"
+              >
+                <div class="grid-card-head">
+                  <span class="table-name-tag">
+                    <span class="table-icon">▦</span>
+                    <code>{{ tbl.tableName }}</code> 表
+                  </span>
+                  <span class="row-count-tag mono">共 {{ tbl.rows.length }} 条记录</span>
+                </div>
+
+                <div class="grid-table-scroll">
+                  <table class="db-data-table">
+                    <thead>
+                      <tr>
+                        <th class="th-index">#</th>
+                        <th
+                          v-for="col in tbl.columns"
+                          :key="col"
+                          class="th-col mono"
+                        >
+                          {{ col }}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(row, rIdx) in tbl.rows" :key="rIdx">
+                        <td class="td-index mono">{{ rIdx + 1 }}</td>
+                        <td
+                          v-for="(val, cIdx) in row"
+                          :key="cIdx"
+                          class="td-val mono"
+                          :class="{ 'is-null': val === 'NULL' }"
+                        >
+                          <span v-if="val === 'NULL'" class="null-pill">NULL</span>
+                          <span v-else>{{ val }}</span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. 原始 SQL 视图 -->
+            <div v-else class="raw-sql-box">
+              <pre class="sql-code">{{ grp.seedSql }}</pre>
+            </div>
+          </div>
+
+          <!-- 右栏：期望结果集 -->
+          <div class="case-part output-part">
+            <div class="part-header output-header">
+              <div class="part-title">
+                <span class="part-icon">📤</span>
+                <span>期望查询结果集 (Expected Output)</span>
+              </div>
+              <button
+                v-if="grp.expectedOutputRaw"
+                type="button"
+                class="btn-copy-sm"
+                @click="copyText(grp.expectedOutputRaw, `样例 #${grp.originalIndex} 期望结果`)"
+              >
+                复制期望结果
+              </button>
+            </div>
+
+            <!-- 表格视图 -->
+            <div v-if="viewMode === 'table' && grp.expectedResult" class="case-tables-list">
+              <div class="data-grid-card output-grid-card">
+                <div class="grid-card-head output-card-head">
+                  <span class="table-name-tag">
+                    <span class="table-icon">▤</span>
+                    <span>查询返回结果集 (Result Set)</span>
+                  </span>
+                  <span class="row-count-tag mono">共 {{ grp.expectedResult.rows.length }} 行</span>
+                </div>
+
+                <div class="grid-table-scroll">
+                  <table class="db-data-table output-data-table">
+                    <thead>
+                      <tr>
+                        <th class="th-index">#</th>
+                        <th
+                          v-for="col in grp.expectedResult.columns"
+                          :key="col.name"
+                          class="th-col mono"
+                        >
+                          {{ col.name }}
+                          <span v-if="col.type" class="col-type-tag">{{ col.type }}</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-if="grp.expectedResult.rows.length === 0">
+                        <td :colspan="grp.expectedResult.columns.length + 1" class="empty-rows-cell mono">
+                          （结果集为空 - 0 行）
+                        </td>
+                      </tr>
+                      <tr v-for="(row, rIdx) in grp.expectedResult.rows" :key="rIdx">
+                        <td class="td-index mono">{{ rIdx + 1 }}</td>
+                        <td
+                          v-for="(val, cIdx) in row"
+                          :key="cIdx"
+                          class="td-val mono"
+                          :class="{ 'is-null': val === 'NULL' }"
+                        >
+                          <span v-if="val === 'NULL'" class="null-pill">NULL</span>
+                          <span v-else>{{ val }}</span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- 原始文本视图 -->
+            <div v-else-if="grp.expectedOutputRaw" class="raw-sql-box">
+              <pre class="sql-code">{{ grp.expectedOutputRaw }}</pre>
+            </div>
+
+            <!-- 未配置期望输出提示 -->
+            <div v-else class="empty-expected-box">
+              <div class="empty-note">
+                <span class="empty-icon">ℹ️</span>
+                <span>该样例未显式配置预存结果集表格，评测时系统将在隔离沙箱中运行出题人标准答案并动态比对。</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -269,6 +369,53 @@ async function copySeedSql(text: string, label: string) {
   font-size: 12px;
 }
 
+.case-split-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  divide-x: 1px solid var(--line);
+}
+
+@media (max-width: 900px) {
+  .case-split-grid {
+    grid-template-columns: 1fr;
+  }
+  .input-part {
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+.case-part {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.input-part {
+  border-right: 1px solid var(--line);
+}
+
+.part-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #fdfdfd;
+  border-bottom: 1px solid var(--line);
+}
+
+.part-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.part-icon {
+  font-size: 14px;
+}
+
 .btn-copy-sm {
   padding: 2px 8px;
   font-size: 11px;
@@ -300,6 +447,10 @@ async function copySeedSql(text: string, label: string) {
   overflow: hidden;
 }
 
+.output-grid-card {
+  border-color: #d0d7de;
+}
+
 .grid-card-head {
   display: flex;
   align-items: center;
@@ -307,6 +458,10 @@ async function copySeedSql(text: string, label: string) {
   padding: 6px 12px;
   background: #f7f7f8;
   border-bottom: 1px solid var(--line);
+}
+
+.output-card-head {
+  background: #f6f8fa;
 }
 
 .table-name-tag {
@@ -345,6 +500,11 @@ async function copySeedSql(text: string, label: string) {
   font-size: 13px;
 }
 
+.output-data-table th {
+  background: #fafbfc !important;
+  color: #1f2328 !important;
+}
+
 .db-data-table th {
   background: #fdfdfd;
   color: var(--ink);
@@ -354,6 +514,16 @@ async function copySeedSql(text: string, label: string) {
   border-bottom: 1.5px solid var(--line);
   border-right: 1px solid #f0f0f0;
   white-space: nowrap;
+}
+
+.col-type-tag {
+  margin-left: 6px;
+  font-size: 10px;
+  padding: 1px 4px;
+  background: #eef2f6;
+  color: #495057;
+  font-weight: normal;
+  border: 1px solid #ced4da;
 }
 
 .db-data-table td {
@@ -388,6 +558,13 @@ async function copySeedSql(text: string, label: string) {
   border-radius: 2px;
 }
 
+.empty-rows-cell {
+  text-align: center;
+  padding: 18px !important;
+  color: var(--ink-secondary);
+  font-size: 12px;
+}
+
 .raw-sql-box {
   padding: 12px;
 }
@@ -397,10 +574,32 @@ async function copySeedSql(text: string, label: string) {
   padding: 10px 12px;
   background: #1e1e1e;
   color: #f8f9fa;
-  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-  font-size: 13px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
   line-height: 1.5;
   overflow-x: auto;
   border-radius: 0;
+}
+
+.empty-expected-box {
+  padding: 24px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  min-height: 120px;
+}
+
+.empty-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.empty-icon {
+  font-size: 14px;
 }
 </style>

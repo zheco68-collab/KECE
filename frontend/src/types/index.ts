@@ -75,6 +75,8 @@ export interface DbTestCase {
   id?: number
   caseOrder: number
   seedSql: string
+  /** 期望输出结果集（JSON/文本），仅公开样例对普通用户可见 */
+  expectedOutput?: string | null
   /** 0 非样例 / 1 样例 */
   isSample: number
 }

@@ -80,6 +80,7 @@ public class DbQuestionSeeder {
             testCase.setQuestionId(question.getId());
             testCase.setCaseOrder(order++);
             testCase.setSeedSql(c.seedSql());
+            testCase.setExpectedOutput(c.expectedOutput());
             testCase.setIsSample(c.sample() ? 1 : 0);
             testCaseMapper.insert(testCase);
         }
@@ -97,7 +98,11 @@ public class DbQuestionSeeder {
             boolean orderSensitive,
             List<Case> cases) {}
 
-    private record Case(String seedSql, boolean sample) {}
+    private record Case(String seedSql, String expectedOutput, boolean sample) {
+        Case(String seedSql, boolean sample) {
+            this(seedSql, null, sample);
+        }
+    }
 
     /** emp 经典 schema：三类题共用，测试点只带数据。 */
     private static final String EMP_SCHEMA =
@@ -132,7 +137,12 @@ public class DbQuestionSeeder {
                             "SELECT id, name FROM emp WHERE dept = 'RD'",
                             null,
                             false,
-                            List.of(new Case(EMP_SEED_1, true), new Case(EMP_SEED_2, false))),
+                            List.of(
+                                    new Case(
+                                            EMP_SEED_1,
+                                            "{\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"VARCHAR\"}],\"rows\":[[\"1\",\"Alice\"],[\"2\",\"Bob\"]]}",
+                                            true),
+                                    new Case(EMP_SEED_2, false))),
                     new Seed(
                             "统计各部门平均薪资",
                             """
@@ -156,7 +166,12 @@ public class DbQuestionSeeder {
                             "SELECT dept, ROUND(AVG(salary), 2) AS avg_salary FROM emp GROUP BY dept ORDER BY dept",
                             null,
                             true,
-                            List.of(new Case(EMP_SEED_1, true), new Case(EMP_SEED_2, false))),
+                            List.of(
+                                    new Case(
+                                            EMP_SEED_1,
+                                            "{\"columns\":[{\"name\":\"dept\",\"type\":\"VARCHAR\"},{\"name\":\"avg_salary\",\"type\":\"DECIMAL\"}],\"rows\":[[\"HR\",\"9000.00\"],[\"RD\",\"11000.00\"]]}",
+                                            true),
+                                    new Case(EMP_SEED_2, false))),
                     new Seed(
                             "给研发部员工涨薪 10%",
                             """
@@ -179,5 +194,10 @@ public class DbQuestionSeeder {
                             "UPDATE emp SET salary = salary * 1.1 WHERE dept = 'RD'",
                             "SELECT id, name, dept, salary FROM emp ORDER BY id",
                             true,
-                            List.of(new Case(EMP_SEED_1, true), new Case(EMP_SEED_2, false))));
+                            List.of(
+                                    new Case(
+                                            EMP_SEED_1,
+                                            "{\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"VARCHAR\"},{\"name\":\"dept\",\"type\":\"VARCHAR\"},{\"name\":\"salary\",\"type\":\"DECIMAL\"}],\"rows\":[[\"1\",\"Alice\",\"RD\",\"11000.00\"],[\"2\",\"Bob\",\"RD\",\"13200.00\"],[\"3\",\"Cara\",\"HR\",\"9000.00\"]]}",
+                                            true),
+                                    new Case(EMP_SEED_2, false))));
 }

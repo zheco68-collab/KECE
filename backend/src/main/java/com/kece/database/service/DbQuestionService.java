@@ -170,13 +170,14 @@ public class DbQuestionService {
             tc.setQuestionId(questionId);
             tc.setCaseOrder(order++);
             tc.setSeedSql(c.getSeedSql());
+            tc.setExpectedOutput(c.getExpectedOutput());
             tc.setIsSample(c.getIsSample() != null && c.getIsSample() == 1 ? 1 : 0);
             testCaseMapper.insert(tc);
         }
     }
 
     private DbQuestionVO toVO(DbQuestion question, boolean privileged, boolean withCases) {
-        List<DbTestCaseVO> caseVOs = withCases ? buildCaseVOs(question.getId()) : List.of();
+        List<DbTestCaseVO> caseVOs = withCases ? buildCaseVOs(question.getId(), privileged) : List.of();
         return DbQuestionVO.builder()
                 .id(question.getId())
                 .title(question.getTitle())
@@ -196,14 +197,17 @@ public class DbQuestionService {
                 .build();
     }
 
-    private List<DbTestCaseVO> buildCaseVOs(Long questionId) {
+    private List<DbTestCaseVO> buildCaseVOs(Long questionId, boolean privileged) {
         List<DbTestCaseVO> result = new ArrayList<>();
         for (DbTestCase tc : testCaseMapper.findByQuestionId(questionId)) {
+            boolean canSeeOutput =
+                    privileged || (tc.getIsSample() != null && tc.getIsSample() == 1);
             result.add(
                     DbTestCaseVO.builder()
                             .id(tc.getId())
                             .caseOrder(tc.getCaseOrder())
                             .seedSql(tc.getSeedSql())
+                            .expectedOutput(canSeeOutput ? tc.getExpectedOutput() : null)
                             .isSample(tc.getIsSample() == null ? 0 : tc.getIsSample())
                             .build());
         }

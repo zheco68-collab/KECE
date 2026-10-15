@@ -52,6 +52,7 @@ const formErrors = reactive({
 interface SeedRow {
   clientId: number
   seedSql: string
+  expectedOutput: string
   isSample: boolean
 }
 
@@ -59,7 +60,12 @@ const seeds = ref<SeedRow[]>([])
 let seedSeq = 0
 
 function addSeed() {
-  seeds.value.push({ clientId: ++seedSeq, seedSql: '', isSample: false })
+  seeds.value.push({
+    clientId: ++seedSeq,
+    seedSql: '',
+    expectedOutput: '',
+    isSample: false,
+  })
 }
 
 function removeSeed(clientId: number) {
@@ -73,6 +79,7 @@ const sampleCasesList = computed(() => {
       id: s.clientId,
       caseOrder: idx + 1,
       seedSql: s.seedSql,
+      expectedOutput: s.expectedOutput,
       isSample: s.isSample ? 1 : 0,
     }))
 })
@@ -85,7 +92,12 @@ async function handleGenerateTemplate() {
   const sampleSeed =
     seeds.value.find((s) => s.isSample && s.seedSql.trim()) ||
     seeds.value.find((s) => s.seedSql.trim())
-  const template = generateMarkdownTemplate(form.schemaSql, sampleSeed?.seedSql, form.title)
+  const template = generateMarkdownTemplate(
+    form.schemaSql,
+    sampleSeed?.seedSql,
+    form.title,
+    sampleSeed?.expectedOutput,
+  )
 
   if (form.description.trim()) {
     const ok = await confirm({
@@ -126,6 +138,7 @@ async function loadQuestion() {
     seeds.value = q.testCases.map((tc) => ({
       clientId: ++seedSeq,
       seedSql: tc.seedSql,
+      expectedOutput: tc.expectedOutput ?? '',
       isSample: tc.isSample === 1,
     }))
   } catch (e) {
@@ -172,6 +185,7 @@ async function save() {
       orderSensitive: form.orderSensitive,
       testCases: seeds.value.map((s) => ({
         seedSql: s.seedSql,
+        expectedOutput: s.expectedOutput.trim() || undefined,
         isSample: s.isSample ? 1 : 0,
       })),
     }
@@ -297,6 +311,16 @@ onMounted(() => {
           </div>
           <FormField label="灌数据 SQL" required hint="INSERT / UPDATE 等初始化数据语句">
             <textarea v-model="s.seedSql" class="input textarea sql-area" placeholder="INSERT INTO ..." />
+          </FormField>
+          <FormField
+            label="期望查询结果 (可选)"
+            hint="支持标准结果集 JSON（如 {&quot;columns&quot;:[...],&quot;rows&quot;:[...]}）或 Markdown 管道表格；公开样例填写后将直接在学生题面展现结果网格"
+          >
+            <textarea
+              v-model="s.expectedOutput"
+              class="input textarea sql-area"
+              placeholder='{"columns":[{"name":"id","type":"INT"},{"name":"name","type":"VARCHAR"}],"rows":[["1","Alice"],["2","Bob"]]}'
+            />
           </FormField>
         </div>
 

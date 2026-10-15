@@ -37,7 +37,7 @@ export interface DbQuestionWriteRequest {
   orderSensitive?: boolean
   /** 状态：1 公开 0 私有。 */
   status?: number
-  testCases: Array<{ seedSql: string; isSample?: number }>
+  testCases: Array<{ seedSql: string; expectedOutput?: string; isSample?: number }>
 }
 
 export const databaseApi = {

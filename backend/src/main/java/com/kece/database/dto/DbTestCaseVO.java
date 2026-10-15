@@ -11,6 +11,7 @@ public class DbTestCaseVO {
     private Long id;
     private Integer caseOrder;
     private String seedSql;
+    private String expectedOutput;
 
     /**
      * 0 非样例 / 1 样例。用 Integer 而非 boolean：boolean 字段名以 is 开头时 Lombok 生成的 isSample() 会被 Jackson 推导为属性名

@@ -11,6 +11,9 @@ public class DbTestCaseRequest {
     @NotBlank(message = "测试点数据不能为空")
     private String seedSql;
 
+    /** 期望输出结果集（JSON/文本格式），可选。 */
+    private String expectedOutput;
+
     /** 0 非样例 / 1 样例，与代码题 TestCaseRequest 保持一致。 */
     private Integer isSample = 0;
 }

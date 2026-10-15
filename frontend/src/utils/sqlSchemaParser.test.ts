@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseSchemaSql, parseSeedSql } from './sqlSchemaParser'
+import { parseSchemaSql, parseSeedSql, parseExpectedOutput } from './sqlSchemaParser'
 
 describe('sqlSchemaParser', () => {
   it('parses single table schema with inline primary key', () => {
@@ -48,4 +48,27 @@ describe('sqlSchemaParser', () => {
     expect(seeds[0].rows[0]).toEqual(['1', 'Alice', 'RD', '10000.00'])
     expect(seeds[0].rows[1]).toEqual(['2', 'Bob', 'RD', '12000.00'])
   })
+
+  it('parses expected output in JSON and markdown table formats', () => {
+    const jsonRaw = '{"columns":[{"name":"id","type":"INT"},{"name":"name","type":"VARCHAR"}],"rows":[["1","Alice"],["2","Bob"]]}'
+    const res1 = parseExpectedOutput(jsonRaw)
+    expect(res1).not.toBeNull()
+    expect(res1?.columns).toHaveLength(2)
+    expect(res1?.columns[0].name).toBe('id')
+    expect(res1?.rows).toHaveLength(2)
+    expect(res1?.rows[0]).toEqual(['1', 'Alice'])
+
+    const mdRaw = `
+      | dept | avg_salary |
+      | :--- | :--- |
+      | HR | 9000.00 |
+      | RD | 11000.00 |
+    `
+    const res2 = parseExpectedOutput(mdRaw)
+    expect(res2).not.toBeNull()
+    expect(res2?.columns.map((c) => c.name)).toEqual(['dept', 'avg_salary'])
+    expect(res2?.rows).toHaveLength(2)
+    expect(res2?.rows[0]).toEqual(['HR', '9000.00'])
+  })
 })
+

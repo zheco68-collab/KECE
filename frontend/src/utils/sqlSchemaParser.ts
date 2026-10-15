@@ -277,6 +277,7 @@ export function generateMarkdownTemplate(
   schemaSql: string,
   seedSql: string = '',
   title: string = '',
+  expectedOutput: string = '',
 ): string {
   const schemas = parseSchemaSql(schemaSql)
   const seeds = parseSeedSql(seedSql, schemas)
@@ -321,13 +322,83 @@ export function generateMarkdownTemplate(
 
   // 3. 期望输出与解释模板
   md += `**期望输出：**\n\n`
-  md += `| id | name |\n`
-  md += `| :--- | :--- |\n`
-  md += `| 1 | Alice |\n`
-  md += `| 2 | Bob |\n\n`
+  const parsedExp = parseExpectedOutput(expectedOutput)
+  if (parsedExp && parsedExp.columns.length > 0) {
+    md += `| ` + parsedExp.columns.map((c) => c.name).join(' | ') + ` |\n`
+    md += `| ` + parsedExp.columns.map(() => ':---').join(' | ') + ` |\n`
+    for (const row of parsedExp.rows) {
+      md += `| ` + row.join(' | ') + ` |\n`
+    }
+    md += `\n`
+  } else {
+    md += `| id | name |\n`
+    md += `| :--- | :--- |\n`
+    md += `| 1 | Alice |\n`
+    md += `| 2 | Bob |\n\n`
+  }
 
   md += `**解释：**\n\n`
-  md += `仅包含部门为 \`RD\` 的员工记录。\n`
+  md += `满足条件的记录结果如上表所示。\n`
 
   return md
 }
+
+export interface ParsedResultSet {
+  columns: Array<{ name: string; type?: string }>
+  rows: string[][]
+}
+
+/**
+ * 解析各种格式的期望输出结果集（支持 JSON 结果集、Markdown 管道表格、制表符表格）
+ */
+export function parseExpectedOutput(raw?: string | null): ParsedResultSet | null {
+  if (!raw || !raw.trim()) return null
+  const trimmed = raw.trim()
+
+  // 1. JSON 格式: {"columns":[{"name":"id","type":"INT"}],"rows":[["1"]]}
+  try {
+    const obj = JSON.parse(trimmed)
+    if (obj && Array.isArray(obj.columns) && Array.isArray(obj.rows)) {
+      return {
+        columns: obj.columns.map((c: any) => ({
+          name: typeof c === 'string' ? c : c.name || '',
+          type: typeof c === 'object' && c.type ? c.type : undefined,
+        })),
+        rows: obj.rows.map((row: any[]) => row.map((cell) => String(cell))),
+      }
+    }
+  } catch {
+    /* 不是 JSON，继续尝试表格解析 */
+  }
+
+  // 2. Markdown 管道表格:
+  // | id | name |
+  // | :--- | :--- |
+  // | 1  | Alice |
+  if (trimmed.includes('|')) {
+    const lines = trimmed
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !/^\|?\s*[-:+| ]+\s*\|?$/.test(l))
+    if (lines.length >= 1) {
+      const parseCells = (line: string) => {
+        const cells = line.split('|').map((s) => s.trim())
+        if (line.startsWith('|')) cells.shift()
+        if (line.endsWith('|')) cells.pop()
+        return cells
+      }
+
+      const headers = parseCells(lines[0])
+      const rows = lines.slice(1).map(parseCells)
+      if (headers.length > 0) {
+        return {
+          columns: headers.map((h) => ({ name: h })),
+          rows,
+        }
+      }
+    }
+  }
+
+  return null
+}
+
