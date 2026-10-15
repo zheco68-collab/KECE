@@ -214,8 +214,7 @@ class ObjectiveQuestionIntegrationTest extends AbstractIntegrationTest {
                         .andExpect(status().isOk())
                         .andReturn();
         assertThat(code(deleted)).isEqualTo(4001);
-        assertThat(body(deleted).path("message").asText())
-                .isEqualTo("该题目已有提交记录，仅管理员可强制删除");
+        assertThat(body(deleted).path("message").asText()).isEqualTo("该题目已有提交记录，仅管理员可强制删除");
 
         // 管理员可强制删除（作答记录级联清理）
         String admin = loginToken("admin", "admin123");

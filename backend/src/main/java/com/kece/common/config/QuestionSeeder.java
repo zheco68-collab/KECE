@@ -18,8 +18,8 @@ import org.springframework.core.annotation.Order;
 /**
  * 编程题示例数据播种：首次启动时写入一组经典入门题（含测试用例），便于直接试用与验收。
  *
- * <p>受 {@code kece.demo-data.enabled} 控制（默认关、仅 dev profile 开）；在 {@link DataInitializer} 播种完
- * teacher 账号后执行（{@code @Order(3)}）。
+ * <p>受 {@code kece.demo-data.enabled} 控制（默认关、仅 dev profile 开）；在 {@link DataInitializer} 播种完 teacher
+ * 账号后执行（{@code @Order(3)}）。
  *
  * <p>幂等策略：题目按标题精确查重，重复启动不产生重复数据；被出题人改动或删除的题不会被重新写回。
  */
@@ -87,7 +87,11 @@ public class QuestionSeeder {
 
     /** 标题为查重键，务必保持稳定；改动标题等于新增一道题。 */
     private record Seed(
-            String title, String description, String difficulty, int timeLimitMs, List<Case> cases) {}
+            String title,
+            String description,
+            String difficulty,
+            int timeLimitMs,
+            List<Case> cases) {}
 
     private record Case(String input, String expectedOutput, boolean sample) {}
 

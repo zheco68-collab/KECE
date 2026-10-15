@@ -7,8 +7,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MySQLContainer;
 
 /**
- * 上下文冒烟测试：验证 Flyway 迁移与应用上下文可正常加载。
- * 默认走 Testcontainers MySQL；系统属性 {@code test.local=true} 时回退到本机 MySQL。
+ * 上下文冒烟测试：验证 Flyway 迁移与应用上下文可正常加载。 默认走 Testcontainers MySQL；系统属性 {@code test.local=true} 时回退到本机
+ * MySQL。
  */
 @SpringBootTest
 class KeceApplicationTests {

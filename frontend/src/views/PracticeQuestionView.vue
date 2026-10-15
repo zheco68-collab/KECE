@@ -7,6 +7,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import { useToast } from '@/composables/useToast'
 import type { Difficulty, Question, TestCase } from '@/types'
 import type { PracticeDetail, PracticePracticalQuestion } from '@/types/practice'
+import { copyToClipboard } from '@/utils/clipboard'
 
 const route = useRoute()
 const router = useRouter()
@@ -38,10 +39,10 @@ const sampleTestCases = computed(() =>
 
 async function copyText(text: string | null | undefined, label: string) {
   if (!text) return
-  try {
-    await navigator.clipboard.writeText(text)
+  const ok = await copyToClipboard(text)
+  if (ok) {
     success(`${label}已复制到剪贴板`)
-  } catch {
+  } else {
     toastError('复制失败，请手动选取复制')
   }
 }

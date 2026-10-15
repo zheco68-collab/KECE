@@ -67,7 +67,7 @@ async function loadSource() {
     } else {
       objList.value = (await objectiveApi.list({ keyword, page: 1, size: 50 })).list
     }
-  } catch (e) {
+  } catch {
     pageError.value = '加载题库失败，请稍后重试'
   } finally {
     listLoading.value = false

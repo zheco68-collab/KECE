@@ -7,6 +7,7 @@ import { useUserStore } from '@/stores/user'
 import { useToast } from '@/composables/useToast'
 import { STATUS_ABBR, statusTone } from '@/utils/submission'
 import type { SubmissionStatus } from '@/types'
+import { copyToClipboard } from '@/utils/clipboard'
 
 const route = useRoute()
 const router = useRouter()
@@ -71,10 +72,10 @@ function toggleExpand(id: number) {
 }
 
 async function copyAnswer(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
+  const ok = await copyToClipboard(text)
+  if (ok) {
     success('作答内容已复制到剪贴板')
-  } catch {
+  } else {
     toastError('复制失败，请手动选取')
   }
 }

@@ -51,7 +51,8 @@ public class ExamSubmissionService {
 
     private static final String CODE_QUEUE_KEY = "judge:queue";
     private static final String SQL_QUEUE_KEY = "judge:sql:queue";
-    private static final List<String> SUPPORTED_LANGUAGES = List.of("cpp", "java", "python", "arkts");
+    private static final List<String> SUPPORTED_LANGUAGES =
+            List.of("cpp", "java", "python", "arkts");
 
     private final ExamMapper examMapper;
     private final ExamQuestionMapper examQuestionMapper;
@@ -251,11 +252,18 @@ public class ExamSubmissionService {
         boolean acm = "ACM".equals(exam.getMode());
 
         List<ExamQuestion> examQuestions = examQuestionMapper.findByExamId(examId);
-        List<ExamSubmission> userSubmissions = submissionMapper.findByExamAndUser(examId, user.getId());
-        Map<Long, ExamSubmission> subByQuestionId = userSubmissions.stream()
-                .collect(Collectors.toMap(ExamSubmission::getExamQuestionId, s -> s, (a, b) -> a));
+        List<ExamSubmission> userSubmissions =
+                submissionMapper.findByExamAndUser(examId, user.getId());
+        Map<Long, ExamSubmission> subByQuestionId =
+                userSubmissions.stream()
+                        .collect(
+                                Collectors.toMap(
+                                        ExamSubmission::getExamQuestionId, s -> s, (a, b) -> a));
 
-        boolean userSubmitted = ended || userSubmissions.stream().anyMatch(r -> r.getSubmitted() != null && r.getSubmitted() == 1);
+        boolean userSubmitted =
+                ended
+                        || userSubmissions.stream()
+                                .anyMatch(r -> r.getSubmitted() != null && r.getSubmitted() == 1);
 
         return examQuestions.stream()
                 .map(

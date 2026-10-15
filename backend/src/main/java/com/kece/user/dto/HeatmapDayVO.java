@@ -18,4 +18,3 @@ public class HeatmapDayVO {
     /** 当天 AC 通过数 */
     private Integer count;
 }
-

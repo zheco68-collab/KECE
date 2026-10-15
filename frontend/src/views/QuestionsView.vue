@@ -173,7 +173,7 @@ onMounted(() => {
 
       <div class="toolbar-right">
         <!-- 做题状态快捷过滤 -->
-        <div class="status-tabs" v-if="userStore.isLoggedIn">
+        <div v-if="userStore.isLoggedIn" class="status-tabs">
           <button
             class="status-tab"
             :class="{ active: statusFilter === 'ALL' }"

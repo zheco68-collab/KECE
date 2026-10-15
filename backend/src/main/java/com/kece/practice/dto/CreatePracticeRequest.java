@@ -19,4 +19,3 @@ public class CreatePracticeRequest {
 
     private List<PracticeQuestionItem> questions;
 }
-

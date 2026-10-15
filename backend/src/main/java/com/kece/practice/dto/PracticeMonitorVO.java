@@ -23,6 +23,7 @@ public class PracticeMonitorVO {
 
     /** 核心 Bento 指标。 */
     private Integer joinedCount;
+
     private Integer submittedCount;
     private Integer totalSubmissions;
     private Double avgScore;
@@ -82,4 +83,3 @@ public class PracticeMonitorVO {
         private LocalDateTime joinedAt;
     }
 }
-

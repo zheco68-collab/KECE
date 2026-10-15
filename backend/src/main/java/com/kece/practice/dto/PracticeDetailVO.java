@@ -29,12 +29,13 @@ public class PracticeDetailVO {
 
     /** 当前用户在该课练的状态。 */
     private Boolean myJoined;
+
     private Integer myScore;
     private Integer mySolvedCount;
     private Boolean mySubmitted;
 
     /** 分组题目：客观题卷 + 编程实操列表。 */
     private List<PracticeObjectiveQuestionVO> objectiveQuestions;
+
     private List<PracticePracticalQuestionVO> practicalQuestions;
 }
-

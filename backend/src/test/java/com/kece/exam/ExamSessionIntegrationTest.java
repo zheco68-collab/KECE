@@ -232,8 +232,7 @@ class ExamSessionIntegrationTest extends AbstractIntegrationTest {
                         .andExpect(status().isOk())
                         .andReturn();
         assertThat(code(del)).isEqualTo(4001);
-        assertThat(body(del).path("message").asText())
-                .isEqualTo("该考试已有作答记录，仅管理员可强制删除");
+        assertThat(body(del).path("message").asText()).isEqualTo("该考试已有作答记录，仅管理员可强制删除");
 
         // 管理员可强制删除（作答记录级联清理）
         String admin = loginToken("admin", "admin123");
@@ -247,9 +246,7 @@ class ExamSessionIntegrationTest extends AbstractIntegrationTest {
 
         // 删除后考试不存在
         MvcResult detail =
-                mockMvc.perform(
-                                get("/exams/" + examId)
-                                        .header("Authorization", "Bearer " + admin))
+                mockMvc.perform(get("/exams/" + examId).header("Authorization", "Bearer " + admin))
                         .andExpect(status().isOk())
                         .andReturn();
         assertThat(code(detail)).isEqualTo(4004);

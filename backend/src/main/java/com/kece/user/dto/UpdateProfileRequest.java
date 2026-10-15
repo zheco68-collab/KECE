@@ -13,4 +13,3 @@ public class UpdateProfileRequest {
     @Size(max = 200, message = "GitHub 链接最多 200 个字符")
     private String githubUrl;
 }
-

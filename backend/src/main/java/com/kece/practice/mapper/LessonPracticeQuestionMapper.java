@@ -10,7 +10,8 @@ import org.apache.ibatis.annotations.Select;
 @Mapper
 public interface LessonPracticeQuestionMapper {
 
-    @Insert("""
+    @Insert(
+            """
         <script>
         INSERT INTO `lesson_practice_question` (practice_id, question_id, question_type, title, score, sort_order)
         VALUES
@@ -21,13 +22,14 @@ public interface LessonPracticeQuestionMapper {
     """)
     int insertBatch(@Param("list") List<LessonPracticeQuestion> list);
 
-    @Select("SELECT * FROM `lesson_practice_question` WHERE practice_id = #{practiceId} ORDER BY sort_order ASC, id ASC")
+    @Select(
+            "SELECT * FROM `lesson_practice_question` WHERE practice_id = #{practiceId} ORDER BY sort_order ASC, id ASC")
     List<LessonPracticeQuestion> listByPracticeId(Long practiceId);
 
     @Select("SELECT * FROM `lesson_practice_question` WHERE id = #{id} LIMIT 1")
     LessonPracticeQuestion findById(Long id);
 
-    @org.apache.ibatis.annotations.Delete("DELETE FROM `lesson_practice_question` WHERE practice_id = #{practiceId}")
+    @org.apache.ibatis.annotations.Delete(
+            "DELETE FROM `lesson_practice_question` WHERE practice_id = #{practiceId}")
     int deleteByPracticeId(Long practiceId);
 }
-

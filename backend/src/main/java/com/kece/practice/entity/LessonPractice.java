@@ -25,4 +25,3 @@ public class LessonPractice {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
-

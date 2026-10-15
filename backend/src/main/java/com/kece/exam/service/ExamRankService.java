@@ -60,9 +60,7 @@ public class ExamRankService {
 
         List<ExamQuestion> examQuestions = examQuestionMapper.findByExamId(examId);
         int examTotalFullScore =
-                examQuestions.stream()
-                        .mapToInt(q -> q.getScore() == null ? 0 : q.getScore())
-                        .sum();
+                examQuestions.stream().mapToInt(q -> q.getScore() == null ? 0 : q.getScore()).sum();
 
         Map<Long, RankAgg> aggByUser = new LinkedHashMap<>();
         for (ExamSubmission row : answers) {
@@ -137,8 +135,7 @@ public class ExamRankService {
                                 .thenComparing(ExamRankVO::getUsername)
                         : Comparator.comparingInt(ExamRankVO::getTotalScore)
                                 .reversed()
-                                .thenComparing(
-                                        ExamRankVO::getFinished, Comparator.reverseOrder())
+                                .thenComparing(ExamRankVO::getFinished, Comparator.reverseOrder())
                                 .thenComparing(ExamRankVO::getUsername);
         result.sort(comparator);
         return result;

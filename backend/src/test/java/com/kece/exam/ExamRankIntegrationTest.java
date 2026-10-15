@@ -166,14 +166,10 @@ class ExamRankIntegrationTest extends AbstractIntegrationTest {
         answer(a, examId, eqIds[1], "B");
         answer(b, examId, eqIds[0], "B");
         answer(b, examId, eqIds[1], "A");
-        mockMvc.perform(
-                        post("/exams/" + examId + "/submit")
-                                .header("Authorization", "Bearer " + a))
+        mockMvc.perform(post("/exams/" + examId + "/submit").header("Authorization", "Bearer " + a))
                 .andExpect(status().isOk())
                 .andReturn();
-        mockMvc.perform(
-                        post("/exams/" + examId + "/submit")
-                                .header("Authorization", "Bearer " + b))
+        mockMvc.perform(post("/exams/" + examId + "/submit").header("Authorization", "Bearer " + b))
                 .andExpect(status().isOk())
                 .andReturn();
 
@@ -199,9 +195,7 @@ class ExamRankIntegrationTest extends AbstractIntegrationTest {
         long[] eqIds = sessionQuestionIds(teacher, examId);
         String a = registerStudent();
         answer(a, examId, eqIds[0], "B");
-        mockMvc.perform(
-                        post("/exams/" + examId + "/submit")
-                                .header("Authorization", "Bearer " + a))
+        mockMvc.perform(post("/exams/" + examId + "/submit").header("Authorization", "Bearer " + a))
                 .andExpect(status().isOk())
                 .andReturn();
 

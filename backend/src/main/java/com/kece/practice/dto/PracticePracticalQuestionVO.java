@@ -26,7 +26,7 @@ public class PracticePracticalQuestionVO {
 
     /** 用户的作答状态。 */
     private String userStatus; // ACCEPTED, WRONG_ANSWER, PENDING, UNATTEMPTED
+
     private Integer userScore;
     private Long submissionId;
 }
-

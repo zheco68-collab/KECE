@@ -12,4 +12,3 @@ public class PracticeObjectiveSubmitRequest {
     @NotEmpty(message = "作答内容不能为空")
     private Map<Long, String> answers;
 }
-

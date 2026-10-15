@@ -15,6 +15,7 @@ import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import { renderMarkdown } from '@/utils/markdown'
 import { STATUS_ABBR, statusTone } from '@/utils/submission'
+import { copyToClipboard } from '@/utils/clipboard'
 import type { Submission, SubmissionStatus } from '@/types'
 
 const route = useRoute()
@@ -142,10 +143,10 @@ function buildLanguage(q: ExamSessionQuestion, state: AnswerState): string | und
 
 async function copySchema() {
   if (!currentQuestion.value?.schemaSql) return
-  try {
-    await navigator.clipboard.writeText(currentQuestion.value.schemaSql)
+  const ok = await copyToClipboard(currentQuestion.value.schemaSql)
+  if (ok) {
     success('建表 DDL 已复制到剪贴板')
-  } catch {
+  } else {
     error('复制失败，请手动选取')
   }
 }

@@ -22,4 +22,3 @@ public class LessonPracticeQuestion {
     private Integer sortOrder;
     private LocalDateTime createdAt;
 }
-

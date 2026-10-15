@@ -15,4 +15,3 @@ public class ChangePasswordRequest {
     @Size(min = 6, max = 32, message = "新密码长度须在 6~32 位之间")
     private String newPassword;
 }
-

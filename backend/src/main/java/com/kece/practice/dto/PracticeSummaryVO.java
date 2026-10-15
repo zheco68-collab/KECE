@@ -32,4 +32,3 @@ public class PracticeSummaryVO {
     private Boolean mySubmitted;
     private LocalDateTime createdAt;
 }
-

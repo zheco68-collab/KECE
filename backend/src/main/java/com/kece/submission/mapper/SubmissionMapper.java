@@ -63,6 +63,5 @@ public interface SubmissionMapper {
 
     /** 统计用户从某日期起的每日 AC 题数。 */
     List<java.util.Map<String, Object>> countAcDaily(
-            @Param("userId") Long userId,
-            @Param("startDate") java.time.LocalDate startDate);
+            @Param("userId") Long userId, @Param("startDate") java.time.LocalDate startDate);
 }

@@ -76,7 +76,7 @@ function logout() {
       <RouterLink to="/" class="brand" title="KECE 课测">
         <img class="brand-logo" src="/KECElogo浅色版-trim.png" alt="KECE 课测" />
       </RouterLink>
-      <nav class="nav" ref="navRef" @mouseleave="onNavMouseLeave">
+      <nav ref="navRef" class="nav" @mouseleave="onNavMouseLeave">
         <div
           class="nav-slider"
           :class="{ 'is-visible': sliderVisible, 'is-animating': sliderAnimating }"

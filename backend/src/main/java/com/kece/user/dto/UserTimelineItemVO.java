@@ -27,4 +27,3 @@ public class UserTimelineItemVO {
     private Integer timeUsedMs;
     private LocalDateTime createdAt;
 }
-

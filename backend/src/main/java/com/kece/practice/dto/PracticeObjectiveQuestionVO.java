@@ -23,8 +23,8 @@ public class PracticeObjectiveQuestionVO {
 
     /** 当前登录用户的作答状态。 */
     private String userAnswer;
+
     private Integer userScore;
     private Boolean isCorrect;
     private Boolean answered;
 }
-

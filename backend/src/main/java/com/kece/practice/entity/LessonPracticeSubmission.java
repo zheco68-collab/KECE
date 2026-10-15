@@ -25,4 +25,3 @@ public class LessonPracticeSubmission {
     private String resultJson;
     private LocalDateTime createdAt;
 }
-

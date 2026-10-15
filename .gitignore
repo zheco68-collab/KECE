@@ -34,6 +34,7 @@ target/
 
 # Go
 judger/bin/
+judger/judger
 judger/vendor/
 *.exe
 *.exe~
@@ -61,9 +62,11 @@ logs/
 coverage/
 *.lcov
 
-# MinIO / local object storage
+# MinIO / local object storage / Uploads
 data/
 minio-data/
+uploads/
+**/uploads/
 
 # Docker volumes
 mysql-data/

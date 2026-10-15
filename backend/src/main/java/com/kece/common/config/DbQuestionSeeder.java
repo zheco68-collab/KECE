@@ -18,8 +18,8 @@ import org.springframework.core.annotation.Order;
 /**
  * 数据库题示例数据播种：首次启动时写入一组基于 emp 经典 schema 的 SELECT/DML 题（含测试点）， 便于直接试用与验收。
  *
- * <p>受 {@code kece.demo-data.enabled} 控制（默认关、仅 dev profile 开）；在 {@link DataInitializer} 播种完
- * teacher 账号后执行（{@code @Order(4)}）。
+ * <p>受 {@code kece.demo-data.enabled} 控制（默认关、仅 dev profile 开）；在 {@link DataInitializer} 播种完 teacher
+ * 账号后执行（{@code @Order(4)}）。
  *
  * <p>幂等策略：题目按标题精确查重，重复启动不产生重复数据；被出题人改动或删除的题不会被重新写回。
  */

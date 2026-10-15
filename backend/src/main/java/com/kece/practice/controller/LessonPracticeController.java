@@ -25,7 +25,8 @@ public class LessonPracticeController {
     @Operation(summary = "发起课练（仅教师与管理员）")
     @RequireRole({Role.TEACHER, Role.ADMIN})
     @PostMapping
-    public ApiResponse<PracticeSummaryVO> createPractice(@Valid @RequestBody CreatePracticeRequest req) {
+    public ApiResponse<PracticeSummaryVO> createPractice(
+            @Valid @RequestBody CreatePracticeRequest req) {
         Long teacherId = AuthContextHolder.currentUserId();
         return ApiResponse.success(practiceService.createPractice(teacherId, req));
     }
@@ -38,7 +39,8 @@ public class LessonPracticeController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "12") int size) {
         Long userId = AuthContextHolder.currentUserId();
-        return ApiResponse.success(practiceService.listPractices(keyword, status, null, userId, page, size));
+        return ApiResponse.success(
+                practiceService.listPractices(keyword, status, null, userId, page, size));
     }
 
     @Operation(summary = "教师/管理后台课练列表（非 ADMIN 仅见自己的）")
@@ -50,9 +52,14 @@ public class LessonPracticeController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
         AuthUser user = AuthContextHolder.get();
-        Long teacherId = (user != null && user.hasRole(Role.ADMIN)) ? null : (user != null ? user.getId() : null);
+        Long teacherId =
+                (user != null && user.hasRole(Role.ADMIN))
+                        ? null
+                        : (user != null ? user.getId() : null);
         Long currentUserId = user != null ? user.getId() : null;
-        return ApiResponse.success(practiceService.listPractices(keyword, status, teacherId, currentUserId, page, size));
+        return ApiResponse.success(
+                practiceService.listPractices(
+                        keyword, status, teacherId, currentUserId, page, size));
     }
 
     @Operation(summary = "通过6位口令加入课练")
@@ -75,8 +82,7 @@ public class LessonPracticeController {
     @RequireRole
     @PostMapping("/{code}/objective-submit")
     public ApiResponse<PracticeObjectiveResultVO> submitObjective(
-            @PathVariable String code,
-            @Valid @RequestBody PracticeObjectiveSubmitRequest req) {
+            @PathVariable String code, @Valid @RequestBody PracticeObjectiveSubmitRequest req) {
         Long userId = AuthContextHolder.currentUserId();
         return ApiResponse.success(practiceService.submitObjective(code, userId, req));
     }
@@ -85,16 +91,19 @@ public class LessonPracticeController {
     @RequireRole
     @PostMapping("/{code}/practical-record")
     public ApiResponse<Void> recordPractical(
-            @PathVariable String code,
-            @RequestBody Map<String, Object> body) {
+            @PathVariable String code, @RequestBody Map<String, Object> body) {
         Long userId = AuthContextHolder.currentUserId();
         Long practiceQuestionId = Long.valueOf(body.get("practiceQuestionId").toString());
-        Long submissionId = body.get("submissionId") != null ? Long.valueOf(body.get("submissionId").toString()) : null;
+        Long submissionId =
+                body.get("submissionId") != null
+                        ? Long.valueOf(body.get("submissionId").toString())
+                        : null;
         String questionType = (String) body.get("questionType");
         String status = (String) body.get("status");
         int score = body.get("score") != null ? Integer.parseInt(body.get("score").toString()) : 0;
 
-        practiceService.recordPracticalSubmission(code, userId, practiceQuestionId, submissionId, questionType, status, score);
+        practiceService.recordPracticalSubmission(
+                code, userId, practiceQuestionId, submissionId, questionType, status, score);
         return ApiResponse.success(null);
     }
 
@@ -128,8 +137,7 @@ public class LessonPracticeController {
     @RequireRole({Role.TEACHER, Role.ADMIN})
     @PostMapping("/{code}/extend")
     public ApiResponse<Void> extendDuration(
-            @PathVariable String code,
-            @RequestBody Map<String, Integer> body) {
+            @PathVariable String code, @RequestBody Map<String, Integer> body) {
         Long teacherId = AuthContextHolder.currentUserId();
         int extraMinutes = body.getOrDefault("extraMinutes", 5);
         practiceService.extendDuration(code, extraMinutes, teacherId);
@@ -145,4 +153,3 @@ public class LessonPracticeController {
         return ApiResponse.success(null);
     }
 }
-

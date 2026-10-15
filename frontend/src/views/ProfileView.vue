@@ -15,6 +15,7 @@ import EditProfileModal from '@/components/EditProfileModal.vue'
 import ChangePasswordModal from '@/components/ChangePasswordModal.vue'
 import { useUserStore } from '@/stores/user'
 import { renderMarkdown } from '@/utils/markdown'
+import { copyToClipboard } from '@/utils/clipboard'
 import type {
   DbSubmissionRecord,
   ObjectiveSubmissionRecord,
@@ -129,14 +130,12 @@ function showToast(msg: string) {
 }
 
 async function copyCode(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
+  const ok = await copyToClipboard(text)
+  if (ok) {
     copyTip.value = true
     setTimeout(() => {
       copyTip.value = false
     }, 1500)
-  } catch {
-    // 复制降级
   }
 }
 

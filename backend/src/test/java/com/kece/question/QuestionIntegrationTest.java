@@ -195,8 +195,7 @@ class QuestionIntegrationTest extends AbstractIntegrationTest {
                         .andExpect(status().isOk())
                         .andReturn();
         assertThat(code(deleteResult)).isEqualTo(4001);
-        assertThat(body(deleteResult).path("message").asText())
-                .isEqualTo("该题目已有提交记录，仅管理员可强制删除");
+        assertThat(body(deleteResult).path("message").asText()).isEqualTo("该题目已有提交记录，仅管理员可强制删除");
 
         // 管理员可强制删除（提交记录级联清理）
         String admin = loginToken("admin", "admin123");
@@ -209,9 +208,7 @@ class QuestionIntegrationTest extends AbstractIntegrationTest {
         assertThat(code(forceDelete)).isEqualTo(200);
 
         MvcResult after =
-                mockMvc.perform(get("/questions/" + id))
-                        .andExpect(status().isOk())
-                        .andReturn();
+                mockMvc.perform(get("/questions/" + id)).andExpect(status().isOk()).andReturn();
         assertThat(code(after)).isEqualTo(4004);
     }
 

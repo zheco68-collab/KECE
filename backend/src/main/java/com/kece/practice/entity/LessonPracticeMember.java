@@ -22,4 +22,3 @@ public class LessonPracticeMember {
     private Integer submitted; // 1 已交卷, 0 进行中
     private LocalDateTime submittedAt;
 }
-

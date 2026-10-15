@@ -1,5 +1,7 @@
 package com.kece.exam.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kece.common.exception.BusinessException;
 import com.kece.common.response.PageResult;
 import com.kece.common.response.ResultCode;
@@ -27,8 +29,6 @@ import com.kece.objective.mapper.ObjectiveQuestionMapper;
 import com.kece.question.entity.Question;
 import com.kece.question.mapper.QuestionMapper;
 import com.kece.submission.mapper.SubmissionMapper;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -71,7 +71,8 @@ public class ExamService {
         Set<Long> submittedExamIds = Collections.emptySet();
         if (currentUser != null) {
             submittedExamIds =
-                    new HashSet<>(submissionMapper.findSubmittedExamIdsByUserId(currentUser.getId()));
+                    new HashSet<>(
+                            submissionMapper.findSubmittedExamIdsByUserId(currentUser.getId()));
         }
         Set<Long> finalSubmittedExamIds = submittedExamIds;
 
@@ -238,7 +239,9 @@ public class ExamService {
                 items.stream()
                         .filter(
                                 e -> {
-                                    if (ExamSessionStatus.CANCELLED.name().equals(e.getSessionStatus())) {
+                                    if (ExamSessionStatus.CANCELLED
+                                            .name()
+                                            .equals(e.getSessionStatus())) {
                                         return false;
                                     }
                                     // 未取消且结束时间在未来或刚到

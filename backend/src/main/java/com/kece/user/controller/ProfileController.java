@@ -52,8 +52,7 @@ public class ProfileController {
     @Operation(summary = "上传本地头像图片")
     @RequireRole
     @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<Map<String, String>> uploadAvatar(
-            @RequestParam("file") MultipartFile file) {
+    public ApiResponse<Map<String, String>> uploadAvatar(@RequestParam("file") MultipartFile file) {
         String avatarUrl = profileService.uploadAvatar(file);
         return ApiResponse.success(Map.of("avatarUrl", avatarUrl));
     }
@@ -61,8 +60,7 @@ public class ProfileController {
     @Operation(summary = "修改登录密码")
     @RequireRole
     @PutMapping("/password")
-    public ApiResponse<Void> changePassword(
-            @Valid @RequestBody ChangePasswordRequest request) {
+    public ApiResponse<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         profileService.changePassword(request);
         return ApiResponse.success();
     }
@@ -77,15 +75,16 @@ public class ProfileController {
     @Operation(summary = "获取用户考试战绩档案")
     @RequireRole
     @GetMapping("/exams")
-    public ApiResponse<List<UserExamRecordVO>> getExams(@RequestParam(required = false) Long userId) {
+    public ApiResponse<List<UserExamRecordVO>> getExams(
+            @RequestParam(required = false) Long userId) {
         return ApiResponse.success(profileService.getExams(userId));
     }
 
     @Operation(summary = "获取用户最近刷题动态时间线")
     @RequireRole
     @GetMapping("/timeline")
-    public ApiResponse<List<UserTimelineItemVO>> getTimeline(@RequestParam(required = false) Long userId) {
+    public ApiResponse<List<UserTimelineItemVO>> getTimeline(
+            @RequestParam(required = false) Long userId) {
         return ApiResponse.success(profileService.getTimeline(userId));
     }
 }
-

@@ -37,7 +37,7 @@ async function fetchMonitorData() {
   try {
     const data = await practiceApi.monitor(code.value)
     monitor.value = data
-  } catch (e) {
+  } catch {
     // 轮询静默失败
   } finally {
     loading.value = false

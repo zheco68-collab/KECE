@@ -9,6 +9,7 @@ import Pagination from '@/components/Pagination.vue'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import type { PracticeSummary } from '@/types/practice'
+import { copyToClipboard } from '@/utils/clipboard'
 
 const router = useRouter()
 const { confirm } = useConfirm()
@@ -73,13 +74,14 @@ function formatTime(iso: string | null): string {
   return iso ? iso.slice(0, 16).replace('T', ' ') : '—'
 }
 
-function copyCode(code?: string | null) {
+async function copyCode(code?: string | null) {
   if (!code) return
-  navigator.clipboard.writeText(code).then(() => {
+  const ok = await copyToClipboard(code)
+  if (ok) {
     toast.success(`口令「${code}」已复制到剪贴板`)
-  }).catch(() => {
+  } else {
     toast.error('复制失败，请手动选取')
-  })
+  }
 }
 
 function openPractice(row: PracticeSummary) {

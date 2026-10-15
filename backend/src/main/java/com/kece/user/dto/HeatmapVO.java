@@ -25,4 +25,3 @@ public class HeatmapVO {
     /** 当前连续打卡天数 */
     private Integer currentStreak;
 }
-

@@ -96,7 +96,8 @@ public class DbSubmissionService {
     }
 
     /** 数据库提交记录列表：默认本人提交，可指定 targetUserId 查看该用户提交，按 id 倒序分页。 */
-    public PageResult<DbSubmissionListVO> list(Long targetUserId, String status, int page, int size) {
+    public PageResult<DbSubmissionListVO> list(
+            Long targetUserId, String status, int page, int size) {
         AuthUser user = AuthContextHolder.get();
         if (user == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);

@@ -23,4 +23,3 @@ public class UserExamRecordVO {
     private Integer totalParticipants;
     private LocalDateTime submittedAt;
 }
-

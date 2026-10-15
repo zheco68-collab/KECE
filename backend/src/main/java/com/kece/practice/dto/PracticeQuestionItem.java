@@ -26,4 +26,3 @@ public class PracticeQuestionItem {
 
     private Integer sortOrder;
 }
-

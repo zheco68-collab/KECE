@@ -23,4 +23,3 @@ public class UserProfileVO {
     private List<String> roles;
     private LocalDateTime createdAt;
 }
-

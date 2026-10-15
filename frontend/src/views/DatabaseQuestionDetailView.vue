@@ -6,6 +6,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import { useUserStore } from '@/stores/user'
 import { useToast } from '@/composables/useToast'
 import type { DbQuestion, DbQuestionType } from '@/types'
+import { copyToClipboard } from '@/utils/clipboard'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,10 +30,10 @@ const sampleCases = computed(() => (question.value?.testCases ?? []).filter((tc)
 
 async function copyText(text: string | null | undefined, label: string) {
   if (!text) return
-  try {
-    await navigator.clipboard.writeText(text)
+  const ok = await copyToClipboard(text)
+  if (ok) {
     success(`${label}已复制到剪贴板`)
-  } catch {
+  } else {
     toastError('复制失败，请手动选取复制')
   }
 }

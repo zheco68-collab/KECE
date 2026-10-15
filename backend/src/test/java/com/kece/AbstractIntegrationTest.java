@@ -20,10 +20,9 @@ import org.testcontainers.containers.MySQLContainer;
 
 /**
  * 集成测试基类。
- * <p>
- * 默认使用 Testcontainers 启动 MySQL/Redis；当系统属性 {@code test.local=true} 时，
- * 回退到本机 MySQL(kece/kece123@localhost:3306) 与 Redis(localhost:6379)，
- * 用于 Docker/Testcontainers 不可用的环境。
+ *
+ * <p>默认使用 Testcontainers 启动 MySQL/Redis；当系统属性 {@code test.local=true} 时， 回退到本机
+ * MySQL(kece/kece123@localhost:3306) 与 Redis(localhost:6379)， 用于 Docker/Testcontainers 不可用的环境。
  */
 @SpringBootTest
 @AutoConfigureMockMvc

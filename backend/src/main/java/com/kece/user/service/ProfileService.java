@@ -241,7 +241,10 @@ public class ProfileService {
                 for (int idx = 0; idx < rankList.size(); idx++) {
                     ExamRankVO r = rankList.get(idx);
                     if (r.getUserId().equals(userId)) {
-                        userScore = "ACM".equalsIgnoreCase(exam.getMode()) ? r.getSolved() : r.getTotalScore();
+                        userScore =
+                                "ACM".equalsIgnoreCase(exam.getMode())
+                                        ? r.getSolved()
+                                        : r.getTotalScore();
                         userRank = idx + 1;
                         break;
                     }

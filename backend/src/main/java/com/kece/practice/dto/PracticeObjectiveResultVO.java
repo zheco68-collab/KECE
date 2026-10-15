@@ -34,4 +34,3 @@ public class PracticeObjectiveResultVO {
         private String correctAnswer;
     }
 }
-

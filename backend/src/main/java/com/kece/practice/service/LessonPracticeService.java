@@ -68,20 +68,22 @@ public class LessonPracticeService {
     public PracticeSummaryVO createPractice(Long teacherId, CreatePracticeRequest req) {
         String accessCode = generateAccessCode();
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime endTime = req.getDurationMinutes() != null && req.getDurationMinutes() > 0
-                ? now.plusMinutes(req.getDurationMinutes())
-                : null;
+        LocalDateTime endTime =
+                req.getDurationMinutes() != null && req.getDurationMinutes() > 0
+                        ? now.plusMinutes(req.getDurationMinutes())
+                        : null;
 
-        LessonPractice practice = LessonPractice.builder()
-                .title(req.getTitle().trim())
-                .description(req.getDescription())
-                .accessCode(accessCode)
-                .durationMinutes(req.getDurationMinutes())
-                .status("ACTIVE")
-                .teacherId(teacherId)
-                .startTime(now)
-                .endTime(endTime)
-                .build();
+        LessonPractice practice =
+                LessonPractice.builder()
+                        .title(req.getTitle().trim())
+                        .description(req.getDescription())
+                        .accessCode(accessCode)
+                        .durationMinutes(req.getDurationMinutes())
+                        .status("ACTIVE")
+                        .teacherId(teacherId)
+                        .startTime(now)
+                        .endTime(endTime)
+                        .build();
 
         practiceMapper.insert(practice);
 
@@ -93,8 +95,14 @@ public class LessonPracticeService {
                 if (title == null || title.isBlank()) {
                     // 自动按题型拉取标题
                     if ("OBJECTIVE".equalsIgnoreCase(item.getQuestionType())) {
-                        ObjectiveQuestion oq = objectiveQuestionMapper.findById(item.getQuestionId());
-                        title = oq != null ? (oq.getContent().length() > 30 ? oq.getContent().substring(0, 30) + "…" : oq.getContent()) : "客观题";
+                        ObjectiveQuestion oq =
+                                objectiveQuestionMapper.findById(item.getQuestionId());
+                        title =
+                                oq != null
+                                        ? (oq.getContent().length() > 30
+                                                ? oq.getContent().substring(0, 30) + "…"
+                                                : oq.getContent())
+                                        : "客观题";
                     } else if ("ALGO".equalsIgnoreCase(item.getQuestionType())) {
                         Question q = algoQuestionMapper.findById(item.getQuestionId());
                         title = q != null ? q.getTitle() : "算法题";
@@ -106,14 +114,16 @@ public class LessonPracticeService {
                     }
                 }
 
-                qList.add(LessonPracticeQuestion.builder()
-                        .practiceId(practice.getId())
-                        .questionId(item.getQuestionId())
-                        .questionType(item.getQuestionType().toUpperCase())
-                        .title(title)
-                        .score(item.getScore() != null ? item.getScore() : 10)
-                        .sortOrder(item.getSortOrder() != null ? item.getSortOrder() : sort++)
-                        .build());
+                qList.add(
+                        LessonPracticeQuestion.builder()
+                                .practiceId(practice.getId())
+                                .questionId(item.getQuestionId())
+                                .questionType(item.getQuestionType().toUpperCase())
+                                .title(title)
+                                .score(item.getScore() != null ? item.getScore() : 10)
+                                .sortOrder(
+                                        item.getSortOrder() != null ? item.getSortOrder() : sort++)
+                                .build());
             }
             questionMapper.insertBatch(qList);
         }
@@ -135,14 +145,15 @@ public class LessonPracticeService {
             throw new BusinessException(ResultCode.PARAM_ERROR, "该课练已截止收卷，无法入场");
         }
         if (member == null) {
-            member = LessonPracticeMember.builder()
-                    .practiceId(practice.getId())
-                    .userId(userId)
-                    .totalScore(0)
-                    .solvedCount(0)
-                    .joinedAt(LocalDateTime.now())
-                    .submitted(0)
-                    .build();
+            member =
+                    LessonPracticeMember.builder()
+                            .practiceId(practice.getId())
+                            .userId(userId)
+                            .totalScore(0)
+                            .solvedCount(0)
+                            .joinedAt(LocalDateTime.now())
+                            .submitted(0)
+                            .build();
             memberMapper.insert(member);
         }
 
@@ -166,7 +177,8 @@ public class LessonPracticeService {
         if ("ENDED".equals(practice.getStatus())) {
             remainingSeconds = 0L;
         } else if (practice.getEndTime() != null) {
-            remainingSeconds = Math.max(0, Duration.between(now, practice.getEndTime()).getSeconds());
+            remainingSeconds =
+                    Math.max(0, Duration.between(now, practice.getEndTime()).getSeconds());
             if (remainingSeconds <= 0 && "ACTIVE".equals(practice.getStatus())) {
                 practice.setStatus("ENDED");
                 practiceMapper.updateStatusAndEndTime(practice.getId(), "ENDED", now);
@@ -174,26 +186,38 @@ public class LessonPracticeService {
             }
         }
 
-        LessonPracticeMember myMember = userId != null ? memberMapper.findByPracticeAndUser(practice.getId(), userId) : null;
+        LessonPracticeMember myMember =
+                userId != null
+                        ? memberMapper.findByPracticeAndUser(practice.getId(), userId)
+                        : null;
         if ("ENDED".equals(practice.getStatus())) {
             User currentUser = userId != null ? userMapper.findById(userId) : null;
-            boolean isTeacherOrAdmin = currentUser != null && (practice.getTeacherId().equals(userId)
-                    || (currentUser.getRoles() != null && (currentUser.getRoles().contains("ADMIN") || currentUser.getRoles().contains("TEACHER"))));
+            boolean isTeacherOrAdmin =
+                    currentUser != null
+                            && (practice.getTeacherId().equals(userId)
+                                    || (currentUser.getRoles() != null
+                                            && (currentUser.getRoles().contains("ADMIN")
+                                                    || currentUser
+                                                            .getRoles()
+                                                            .contains("TEACHER"))));
             if (!isTeacherOrAdmin) {
                 throw new BusinessException(ResultCode.PARAM_ERROR, "该课练已结束，无法进入");
             }
         }
-        List<LessonPracticeQuestion> allQuestions = questionMapper.listByPracticeId(practice.getId());
-        List<LessonPracticeSubmission> mySubmissions = userId != null
-                ? submissionMapper.listByPracticeAndUser(practice.getId(), userId)
-                : Collections.emptyList();
+        List<LessonPracticeQuestion> allQuestions =
+                questionMapper.listByPracticeId(practice.getId());
+        List<LessonPracticeSubmission> mySubmissions =
+                userId != null
+                        ? submissionMapper.listByPracticeAndUser(practice.getId(), userId)
+                        : Collections.emptyList();
 
-        Map<Long, LessonPracticeSubmission> subMap = mySubmissions.stream()
-                .collect(Collectors.toMap(
-                        LessonPracticeSubmission::getPracticeQuestionId,
-                        s -> s,
-                        (existing, replacement) -> existing
-                ));
+        Map<Long, LessonPracticeSubmission> subMap =
+                mySubmissions.stream()
+                        .collect(
+                                Collectors.toMap(
+                                        LessonPracticeSubmission::getPracticeQuestionId,
+                                        s -> s,
+                                        (existing, replacement) -> existing));
 
         List<PracticeObjectiveQuestionVO> objectiveList = new ArrayList<>();
         List<PracticePracticalQuestionVO> practicalList = new ArrayList<>();
@@ -205,58 +229,70 @@ public class LessonPracticeService {
                 List<String> options = parseOptions(oq != null ? oq.getOptions() : null);
                 boolean isCorrect = sub != null && "ACCEPTED".equals(sub.getStatus());
 
-                objectiveList.add(PracticeObjectiveQuestionVO.builder()
-                        .practiceQuestionId(pq.getId())
-                        .questionId(pq.getQuestionId())
-                        .type(oq != null ? oq.getType() : "SINGLE")
-                        .content(oq != null ? oq.getContent() : pq.getTitle())
-                        .options(options)
-                        .score(pq.getScore())
-                        .sortOrder(pq.getSortOrder())
-                        .userAnswer(sub != null ? sub.getAnswer() : null)
-                        .userScore(sub != null ? sub.getScore() : null)
-                        .isCorrect(sub != null ? isCorrect : null)
-                        .answered(sub != null)
-                        .build());
+                objectiveList.add(
+                        PracticeObjectiveQuestionVO.builder()
+                                .practiceQuestionId(pq.getId())
+                                .questionId(pq.getQuestionId())
+                                .type(oq != null ? oq.getType() : "SINGLE")
+                                .content(oq != null ? oq.getContent() : pq.getTitle())
+                                .options(options)
+                                .score(pq.getScore())
+                                .sortOrder(pq.getSortOrder())
+                                .userAnswer(sub != null ? sub.getAnswer() : null)
+                                .userScore(sub != null ? sub.getScore() : null)
+                                .isCorrect(sub != null ? isCorrect : null)
+                                .answered(sub != null)
+                                .build());
             } else if ("ALGO".equals(pq.getQuestionType())) {
                 Question aq = algoQuestionMapper.findById(pq.getQuestionId());
-                List<String> langs = aq != null && aq.getLanguages() != null
-                        ? Arrays.stream(aq.getLanguages().split(",")).map(String::trim).toList()
-                        : List.of("cpp", "java", "python");
+                List<String> langs =
+                        aq != null && aq.getLanguages() != null
+                                ? Arrays.stream(aq.getLanguages().split(","))
+                                        .map(String::trim)
+                                        .toList()
+                                : List.of("cpp", "java", "python");
 
-                practicalList.add(PracticePracticalQuestionVO.builder()
-                        .practiceQuestionId(pq.getId())
-                        .questionId(pq.getQuestionId())
-                        .questionType("ALGO")
-                        .title(aq != null ? aq.getTitle() : pq.getTitle())
-                        .score(pq.getScore())
-                        .sortOrder(pq.getSortOrder())
-                        .difficulty(aq != null ? aq.getDifficulty() : "MEDIUM")
-                        .timeLimitMs(aq != null && aq.getTimeLimit() != null ? aq.getTimeLimit() : 1000)
-                        .memoryLimitKb(aq != null && aq.getMemoryLimit() != null ? aq.getMemoryLimit() * 1024 : 262144)
-                        .languages(langs)
-                        .userStatus(sub != null ? sub.getStatus() : "UNATTEMPTED")
-                        .userScore(sub != null ? sub.getScore() : 0)
-                        .submissionId(sub != null ? sub.getSubmissionId() : null)
-                        .build());
+                practicalList.add(
+                        PracticePracticalQuestionVO.builder()
+                                .practiceQuestionId(pq.getId())
+                                .questionId(pq.getQuestionId())
+                                .questionType("ALGO")
+                                .title(aq != null ? aq.getTitle() : pq.getTitle())
+                                .score(pq.getScore())
+                                .sortOrder(pq.getSortOrder())
+                                .difficulty(aq != null ? aq.getDifficulty() : "MEDIUM")
+                                .timeLimitMs(
+                                        aq != null && aq.getTimeLimit() != null
+                                                ? aq.getTimeLimit()
+                                                : 1000)
+                                .memoryLimitKb(
+                                        aq != null && aq.getMemoryLimit() != null
+                                                ? aq.getMemoryLimit() * 1024
+                                                : 262144)
+                                .languages(langs)
+                                .userStatus(sub != null ? sub.getStatus() : "UNATTEMPTED")
+                                .userScore(sub != null ? sub.getScore() : 0)
+                                .submissionId(sub != null ? sub.getSubmissionId() : null)
+                                .build());
             } else if ("DB".equals(pq.getQuestionType())) {
                 DbQuestion dq = dbQuestionMapper.findById(pq.getQuestionId());
 
-                practicalList.add(PracticePracticalQuestionVO.builder()
-                        .practiceQuestionId(pq.getId())
-                        .questionId(pq.getQuestionId())
-                        .questionType("DB")
-                        .title(dq != null ? dq.getTitle() : pq.getTitle())
-                        .score(pq.getScore())
-                        .sortOrder(pq.getSortOrder())
-                        .difficulty(dq != null ? dq.getType() : "SELECT")
-                        .timeLimitMs(3000)
-                        .memoryLimitKb(262144)
-                        .languages(List.of("sql"))
-                        .userStatus(sub != null ? sub.getStatus() : "UNATTEMPTED")
-                        .userScore(sub != null ? sub.getScore() : 0)
-                        .submissionId(sub != null ? sub.getSubmissionId() : null)
-                        .build());
+                practicalList.add(
+                        PracticePracticalQuestionVO.builder()
+                                .practiceQuestionId(pq.getId())
+                                .questionId(pq.getQuestionId())
+                                .questionType("DB")
+                                .title(dq != null ? dq.getTitle() : pq.getTitle())
+                                .score(pq.getScore())
+                                .sortOrder(pq.getSortOrder())
+                                .difficulty(dq != null ? dq.getType() : "SELECT")
+                                .timeLimitMs(3000)
+                                .memoryLimitKb(262144)
+                                .languages(List.of("sql"))
+                                .userStatus(sub != null ? sub.getStatus() : "UNATTEMPTED")
+                                .userScore(sub != null ? sub.getScore() : 0)
+                                .submissionId(sub != null ? sub.getSubmissionId() : null)
+                                .build());
             }
         }
 
@@ -284,7 +320,8 @@ public class LessonPracticeService {
 
     /** 客观题集中答题并批量即时判分。 */
     @Transactional
-    public PracticeObjectiveResultVO submitObjective(String accessCode, Long userId, PracticeObjectiveSubmitRequest req) {
+    public PracticeObjectiveResultVO submitObjective(
+            String accessCode, Long userId, PracticeObjectiveSubmitRequest req) {
         String code = accessCode.trim().toUpperCase();
         LessonPractice practice = practiceMapper.findByAccessCode(code);
         if (practice == null) {
@@ -297,20 +334,22 @@ public class LessonPracticeService {
         // 随堂练习定位：只要课练处于未截止状态，完全支持随时订正并重新判分
         LessonPracticeMember member = memberMapper.findByPracticeAndUser(practice.getId(), userId);
         if (member == null) {
-            member = LessonPracticeMember.builder()
-                    .practiceId(practice.getId())
-                    .userId(userId)
-                    .totalScore(0)
-                    .solvedCount(0)
-                    .joinedAt(LocalDateTime.now())
-                    .submitted(0)
-                    .build();
+            member =
+                    LessonPracticeMember.builder()
+                            .practiceId(practice.getId())
+                            .userId(userId)
+                            .totalScore(0)
+                            .solvedCount(0)
+                            .joinedAt(LocalDateTime.now())
+                            .submitted(0)
+                            .build();
             memberMapper.insert(member);
         }
 
-        List<LessonPracticeQuestion> questions = questionMapper.listByPracticeId(practice.getId()).stream()
-                .filter(q -> "OBJECTIVE".equals(q.getQuestionType()))
-                .toList();
+        List<LessonPracticeQuestion> questions =
+                questionMapper.listByPracticeId(practice.getId()).stream()
+                        .filter(q -> "OBJECTIVE".equals(q.getQuestionType()))
+                        .toList();
 
         List<PracticeObjectiveResultVO.ItemResult> itemResults = new ArrayList<>();
         int totalEarned = 0;
@@ -325,12 +364,24 @@ public class LessonPracticeService {
             }
 
             ObjectiveQuestion oq = objectiveQuestionMapper.findById(pq.getQuestionId());
-            AnswerResultVO gradeResult = oq != null
-                    ? objectiveGrader.grade(oq, submittedAnswer)
-                    : AnswerResultVO.builder().correct(false).score(0).fullScore(pq.getScore()).build();
+            AnswerResultVO gradeResult =
+                    oq != null
+                            ? objectiveGrader.grade(oq, submittedAnswer)
+                            : AnswerResultVO.builder()
+                                    .correct(false)
+                                    .score(0)
+                                    .fullScore(pq.getScore())
+                                    .build();
 
             // 折算满分权重
-            int questionScore = (int) Math.round((double) gradeResult.getScore() * pq.getScore() / (gradeResult.getFullScore() > 0 ? gradeResult.getFullScore() : 1));
+            int questionScore =
+                    (int)
+                            Math.round(
+                                    (double) gradeResult.getScore()
+                                            * pq.getScore()
+                                            / (gradeResult.getFullScore() > 0
+                                                    ? gradeResult.getFullScore()
+                                                    : 1));
             totalEarned += questionScore;
             if (gradeResult.isCorrect()) {
                 correctCount++;
@@ -339,35 +390,39 @@ public class LessonPracticeService {
             String status = gradeResult.isCorrect() ? "ACCEPTED" : "WRONG_ANSWER";
 
             // 保存或更新提交
-            LessonPracticeSubmission existSub = submissionMapper.findByPracticeUserQuestion(practice.getId(), userId, pq.getId());
+            LessonPracticeSubmission existSub =
+                    submissionMapper.findByPracticeUserQuestion(
+                            practice.getId(), userId, pq.getId());
             if (existSub != null) {
                 existSub.setAnswer(submittedAnswer);
                 existSub.setStatus(status);
                 existSub.setScore(questionScore);
                 submissionMapper.updateSubmission(existSub);
             } else {
-                LessonPracticeSubmission newSub = LessonPracticeSubmission.builder()
-                        .practiceId(practice.getId())
-                        .practiceQuestionId(pq.getId())
-                        .userId(userId)
-                        .questionType("OBJECTIVE")
-                        .answer(submittedAnswer)
-                        .status(status)
-                        .score(questionScore)
-                        .createdAt(LocalDateTime.now())
-                        .build();
+                LessonPracticeSubmission newSub =
+                        LessonPracticeSubmission.builder()
+                                .practiceId(practice.getId())
+                                .practiceQuestionId(pq.getId())
+                                .userId(userId)
+                                .questionType("OBJECTIVE")
+                                .answer(submittedAnswer)
+                                .status(status)
+                                .score(questionScore)
+                                .createdAt(LocalDateTime.now())
+                                .build();
                 submissionMapper.insert(newSub);
             }
 
-            itemResults.add(PracticeObjectiveResultVO.ItemResult.builder()
-                    .practiceQuestionId(pq.getId())
-                    .questionId(pq.getQuestionId())
-                    .correct(gradeResult.isCorrect())
-                    .score(questionScore)
-                    .fullScore(pq.getScore())
-                    .userAnswer(submittedAnswer)
-                    .correctAnswer(oq != null ? oq.getAnswer() : null)
-                    .build());
+            itemResults.add(
+                    PracticeObjectiveResultVO.ItemResult.builder()
+                            .practiceQuestionId(pq.getId())
+                            .questionId(pq.getQuestionId())
+                            .correct(gradeResult.isCorrect())
+                            .score(questionScore)
+                            .fullScore(pq.getScore())
+                            .userAnswer(submittedAnswer)
+                            .correctAnswer(oq != null ? oq.getAnswer() : null)
+                            .build());
         }
 
         // 重新统计用户在本次课练中的总分与 AC 题目数
@@ -399,23 +454,26 @@ public class LessonPracticeService {
         LessonPracticeMember member = memberMapper.findByPracticeAndUser(practice.getId(), userId);
         if (member != null && member.getSubmitted() == 1) return;
 
-        LessonPracticeSubmission exist = submissionMapper.findByPracticeUserQuestion(practice.getId(), userId, practiceQuestionId);
+        LessonPracticeSubmission exist =
+                submissionMapper.findByPracticeUserQuestion(
+                        practice.getId(), userId, practiceQuestionId);
         if (exist != null) {
             exist.setSubmissionId(submissionId);
             exist.setStatus(status);
             exist.setScore(score);
             submissionMapper.updateSubmission(exist);
         } else {
-            LessonPracticeSubmission sub = LessonPracticeSubmission.builder()
-                    .practiceId(practice.getId())
-                    .practiceQuestionId(practiceQuestionId)
-                    .userId(userId)
-                    .questionType(questionType)
-                    .submissionId(submissionId)
-                    .status(status)
-                    .score(score)
-                    .createdAt(LocalDateTime.now())
-                    .build();
+            LessonPracticeSubmission sub =
+                    LessonPracticeSubmission.builder()
+                            .practiceId(practice.getId())
+                            .practiceQuestionId(practiceQuestionId)
+                            .userId(userId)
+                            .questionType(questionType)
+                            .submissionId(submissionId)
+                            .status(status)
+                            .score(score)
+                            .createdAt(LocalDateTime.now())
+                            .build();
             submissionMapper.insert(sub);
         }
 
@@ -424,11 +482,17 @@ public class LessonPracticeService {
 
     /** 重新计算成员总分与通过题目数（只统计实战编程/SQL题目通过数）。 */
     private void recalculateMemberScore(Long practiceId, Long userId) {
-        List<LessonPracticeSubmission> subs = submissionMapper.listByPracticeAndUser(practiceId, userId);
+        List<LessonPracticeSubmission> subs =
+                submissionMapper.listByPracticeAndUser(practiceId, userId);
         int totalScore = subs.stream().mapToInt(LessonPracticeSubmission::getScore).sum();
-        int solvedCount = (int) subs.stream()
-                .filter(s -> !"OBJECTIVE".equals(s.getQuestionType()) && "ACCEPTED".equals(s.getStatus()))
-                .count();
+        int solvedCount =
+                (int)
+                        subs.stream()
+                                .filter(
+                                        s ->
+                                                !"OBJECTIVE".equals(s.getQuestionType())
+                                                        && "ACCEPTED".equals(s.getStatus()))
+                                .count();
 
         memberMapper.updateScoreAndSolved(practiceId, userId, totalScore, solvedCount);
     }
@@ -456,18 +520,33 @@ public class LessonPracticeService {
         int totalSubmissions = submissionMapper.countTotalByPracticeId(practice.getId());
 
         List<LessonPracticeMember> members = memberMapper.listByPracticeId(practice.getId());
-        double avgScore = members.isEmpty() ? 0.0 : members.stream().mapToInt(LessonPracticeMember::getTotalScore).average().orElse(0.0);
+        double avgScore =
+                members.isEmpty()
+                        ? 0.0
+                        : members.stream()
+                                .mapToInt(LessonPracticeMember::getTotalScore)
+                                .average()
+                                .orElse(0.0);
 
         List<LessonPracticeQuestion> questions = questionMapper.listByPracticeId(practice.getId());
-        int totalPossibleScore = questions.stream().mapToInt(LessonPracticeQuestion::getScore).sum();
-        int perfectCount = (int) members.stream().filter(m -> m.getTotalScore() >= totalPossibleScore && totalPossibleScore > 0).count();
+        int totalPossibleScore =
+                questions.stream().mapToInt(LessonPracticeQuestion::getScore).sum();
+        int perfectCount =
+                (int)
+                        members.stream()
+                                .filter(
+                                        m ->
+                                                m.getTotalScore() >= totalPossibleScore
+                                                        && totalPossibleScore > 0)
+                                .count();
 
         LocalDateTime now = LocalDateTime.now();
         Long remainingSeconds = null;
         if ("ENDED".equals(practice.getStatus())) {
             remainingSeconds = 0L;
         } else if (practice.getEndTime() != null) {
-            remainingSeconds = Math.max(0, Duration.between(now, practice.getEndTime()).getSeconds());
+            remainingSeconds =
+                    Math.max(0, Duration.between(now, practice.getEndTime()).getSeconds());
             if (remainingSeconds <= 0 && "ACTIVE".equals(practice.getStatus())) {
                 practice.setStatus("ENDED");
                 practiceMapper.updateStatusAndEndTime(practice.getId(), "ENDED", now);
@@ -482,35 +561,44 @@ public class LessonPracticeService {
             int passCount = submissionMapper.countPassByPracticeQuestionId(q.getId());
             double rate = submitCount > 0 ? (double) passCount / submitCount * 100 : 0.0;
 
-            questionStats.add(PracticeMonitorVO.QuestionStatItem.builder()
-                    .practiceQuestionId(q.getId())
-                    .questionId(q.getQuestionId())
-                    .questionType(q.getQuestionType())
-                    .title(q.getTitle())
-                    .score(q.getScore())
-                    .submitCount(submitCount)
-                    .passCount(passCount)
-                    .passRate(Math.round(rate * 10.0) / 10.0)
-                    .build());
+            questionStats.add(
+                    PracticeMonitorVO.QuestionStatItem.builder()
+                            .practiceQuestionId(q.getId())
+                            .questionId(q.getQuestionId())
+                            .questionType(q.getQuestionType())
+                            .title(q.getTitle())
+                            .score(q.getScore())
+                            .submitCount(submitCount)
+                            .passCount(passCount)
+                            .passRate(Math.round(rate * 10.0) / 10.0)
+                            .build());
         }
 
         // 实时提交流水
-        List<LessonPracticeSubmission> recentSubs = submissionMapper.listRecentByPracticeId(practice.getId(), 15);
-        Map<Long, String> qTitleMap = questions.stream().collect(Collectors.toMap(LessonPracticeQuestion::getId, LessonPracticeQuestion::getTitle, (a, b) -> a));
+        List<LessonPracticeSubmission> recentSubs =
+                submissionMapper.listRecentByPracticeId(practice.getId(), 15);
+        Map<Long, String> qTitleMap =
+                questions.stream()
+                        .collect(
+                                Collectors.toMap(
+                                        LessonPracticeQuestion::getId,
+                                        LessonPracticeQuestion::getTitle,
+                                        (a, b) -> a));
 
         List<PracticeMonitorVO.RecentActivityItem> recentActivities = new ArrayList<>();
         for (LessonPracticeSubmission s : recentSubs) {
             User u = userMapper.findById(s.getUserId());
-            recentActivities.add(PracticeMonitorVO.RecentActivityItem.builder()
-                    .id(s.getId())
-                    .username(u != null ? u.getUsername() : "学生")
-                    .nickname(u != null ? u.getUsername() : "学生")
-                    .questionTitle(qTitleMap.getOrDefault(s.getPracticeQuestionId(), "题目"))
-                    .questionType(s.getQuestionType())
-                    .status(s.getStatus())
-                    .score(s.getScore())
-                    .createdAt(s.getCreatedAt())
-                    .build());
+            recentActivities.add(
+                    PracticeMonitorVO.RecentActivityItem.builder()
+                            .id(s.getId())
+                            .username(u != null ? u.getUsername() : "学生")
+                            .nickname(u != null ? u.getUsername() : "学生")
+                            .questionTitle(qTitleMap.getOrDefault(s.getPracticeQuestionId(), "题目"))
+                            .questionType(s.getQuestionType())
+                            .status(s.getStatus())
+                            .score(s.getScore())
+                            .createdAt(s.getCreatedAt())
+                            .build());
         }
 
         // 天梯排行榜
@@ -518,16 +606,17 @@ public class LessonPracticeService {
         int rank = 1;
         for (LessonPracticeMember m : members) {
             User u = userMapper.findById(m.getUserId());
-            leaderboard.add(PracticeMonitorVO.LeaderboardItem.builder()
-                    .rank(rank++)
-                    .userId(m.getUserId())
-                    .username(u != null ? u.getUsername() : "学生" + m.getUserId())
-                    .nickname(u != null ? u.getUsername() : "学生" + m.getUserId())
-                    .solvedCount(m.getSolvedCount())
-                    .totalScore(m.getTotalScore())
-                    .submitted(m.getSubmitted() == 1)
-                    .joinedAt(m.getJoinedAt())
-                    .build());
+            leaderboard.add(
+                    PracticeMonitorVO.LeaderboardItem.builder()
+                            .rank(rank++)
+                            .userId(m.getUserId())
+                            .username(u != null ? u.getUsername() : "学生" + m.getUserId())
+                            .nickname(u != null ? u.getUsername() : "学生" + m.getUserId())
+                            .solvedCount(m.getSolvedCount())
+                            .totalScore(m.getTotalScore())
+                            .submitted(m.getSubmitted() == 1)
+                            .joinedAt(m.getJoinedAt())
+                            .build());
         }
 
         return PracticeMonitorVO.builder()
@@ -566,7 +655,10 @@ public class LessonPracticeService {
             throw new BusinessException(ResultCode.NOT_FOUND, "课练不存在");
         }
         int newDuration = practice.getDurationMinutes() + extraMinutes;
-        LocalDateTime newEndTime = practice.getEndTime() != null ? practice.getEndTime().plusMinutes(extraMinutes) : LocalDateTime.now().plusMinutes(newDuration);
+        LocalDateTime newEndTime =
+                practice.getEndTime() != null
+                        ? practice.getEndTime().plusMinutes(extraMinutes)
+                        : LocalDateTime.now().plusMinutes(newDuration);
         practiceMapper.updateDuration(practice.getId(), newDuration, newEndTime);
     }
 
@@ -590,16 +682,16 @@ public class LessonPracticeService {
     }
 
     /** 分页查询课练列表（支持关键词、状态及指定教师筛选）。 */
-    public Map<String, Object> listPractices(String keyword, String status, Long teacherId, Long currentUserId, int page, int size) {
+    public Map<String, Object> listPractices(
+            String keyword, String status, Long teacherId, Long currentUserId, int page, int size) {
         int offset = Math.max(0, (page - 1) * size);
         String kw = keyword != null && !keyword.isBlank() ? keyword.trim() : null;
         String st = status != null && !status.isBlank() ? status.trim() : null;
         List<LessonPractice> list = practiceMapper.listFilter(kw, st, teacherId, offset, size);
         int total = practiceMapper.countFilter(kw, st, teacherId);
 
-        List<PracticeSummaryVO> voList = list.stream()
-                .map(p -> getSummaryVO(p, currentUserId))
-                .toList();
+        List<PracticeSummaryVO> voList =
+                list.stream().map(p -> getSummaryVO(p, currentUserId)).toList();
 
         return Map.of("list", voList, "total", total, "page", page, "size", size);
     }
@@ -610,15 +702,22 @@ public class LessonPracticeService {
         int memberCount = memberMapper.countByPracticeId(p.getId());
 
         List<LessonPracticeQuestion> qList = questionMapper.listByPracticeId(p.getId());
-        int objectiveCount = (int) qList.stream().filter(q -> "OBJECTIVE".equals(q.getQuestionType())).count();
+        int objectiveCount =
+                (int) qList.stream().filter(q -> "OBJECTIVE".equals(q.getQuestionType())).count();
         int practicalCount = qList.size() - objectiveCount;
 
-        LessonPracticeMember member = currentUserId != null ? memberMapper.findByPracticeAndUser(p.getId(), currentUserId) : null;
+        LessonPracticeMember member =
+                currentUserId != null
+                        ? memberMapper.findByPracticeAndUser(p.getId(), currentUserId)
+                        : null;
 
         boolean canSeeCode = false;
         if (currentUserId != null) {
             User currentUser = userMapper.findById(currentUserId);
-            boolean isAdmin = currentUser != null && currentUser.getRoles() != null && currentUser.getRoles().contains("ADMIN");
+            boolean isAdmin =
+                    currentUser != null
+                            && currentUser.getRoles() != null
+                            && currentUser.getRoles().contains("ADMIN");
             boolean isTeacherOfThis = Objects.equals(p.getTeacherId(), currentUserId);
             boolean isJoined = member != null;
             canSeeCode = isAdmin || isTeacherOfThis || isJoined;
@@ -657,4 +756,3 @@ public class LessonPracticeService {
         }
     }
 }
-

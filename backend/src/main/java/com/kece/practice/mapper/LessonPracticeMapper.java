@@ -13,7 +13,8 @@ import org.apache.ibatis.annotations.Update;
 @Mapper
 public interface LessonPracticeMapper {
 
-    @Insert("""
+    @Insert(
+            """
         INSERT INTO `lesson_practice` (title, description, access_code, duration_minutes, status, teacher_id, start_time, end_time)
         VALUES (#{title}, #{description}, #{accessCode}, #{durationMinutes}, #{status}, #{teacherId}, #{startTime}, #{endTime})
     """)
@@ -32,7 +33,8 @@ public interface LessonPracticeMapper {
     @Select("SELECT COUNT(*) FROM `lesson_practice`")
     int countAll();
 
-    @Select("""
+    @Select(
+            """
         <script>
         SELECT * FROM `lesson_practice`
         <where>
@@ -57,7 +59,8 @@ public interface LessonPracticeMapper {
             @Param("offset") int offset,
             @Param("limit") int limit);
 
-    @Select("""
+    @Select(
+            """
         <script>
         SELECT COUNT(*) FROM `lesson_practice`
         <where>
@@ -84,13 +87,15 @@ public interface LessonPracticeMapper {
     @Update("UPDATE `lesson_practice` SET status = #{status} WHERE id = #{id}")
     int updateStatus(@Param("id") Long id, @Param("status") String status);
 
-    @Update("UPDATE `lesson_practice` SET status = #{status}, end_time = #{endTime} WHERE id = #{id}")
+    @Update(
+            "UPDATE `lesson_practice` SET status = #{status}, end_time = #{endTime} WHERE id = #{id}")
     int updateStatusAndEndTime(
             @Param("id") Long id,
             @Param("status") String status,
             @Param("endTime") LocalDateTime endTime);
 
-    @Update("UPDATE `lesson_practice` SET duration_minutes = #{durationMinutes}, end_time = #{endTime} WHERE id = #{id}")
+    @Update(
+            "UPDATE `lesson_practice` SET duration_minutes = #{durationMinutes}, end_time = #{endTime} WHERE id = #{id}")
     int updateDuration(
             @Param("id") Long id,
             @Param("durationMinutes") int durationMinutes,
@@ -99,4 +104,3 @@ public interface LessonPracticeMapper {
     @org.apache.ibatis.annotations.Delete("DELETE FROM `lesson_practice` WHERE id = #{id}")
     int deleteById(Long id);
 }
-

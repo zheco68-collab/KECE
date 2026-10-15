@@ -37,9 +37,7 @@ public interface UserMapper {
     int updatePassword(@Param("id") Long id, @Param("passwordHash") String passwordHash);
 
     int updateProfile(
-            @Param("id") Long id,
-            @Param("bio") String bio,
-            @Param("githubUrl") String githubUrl);
+            @Param("id") Long id, @Param("bio") String bio, @Param("githubUrl") String githubUrl);
 
     int updateAvatar(@Param("id") Long id, @Param("avatarUrl") String avatarUrl);
 }

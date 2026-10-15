@@ -3,6 +3,7 @@ package queue
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -99,15 +100,5 @@ func (q *Queue) Heartbeat(ctx context.Context) error {
 }
 
 func itoa(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
+	return strconv.FormatInt(n, 10)
 }
