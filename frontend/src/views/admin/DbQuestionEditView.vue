@@ -6,12 +6,17 @@ import { ApiError } from '@/api/request'
 import AdminNav from '@/components/AdminNav.vue'
 import FormField from '@/components/FormField.vue'
 import MarkdownEditor from '@/components/MarkdownEditor.vue'
+import DbSchemaViewer from '@/components/DbSchemaViewer.vue'
+import DbSampleViewer from '@/components/DbSampleViewer.vue'
+import { generateMarkdownTemplate } from '@/utils/sqlSchemaParser'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 import type { DbQuestionType } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const questionId = computed(() => {
   const raw = route.params.id
@@ -59,6 +64,48 @@ function addSeed() {
 
 function removeSeed(clientId: number) {
   seeds.value = seeds.value.filter((s) => s.clientId !== clientId)
+}
+
+const sampleCasesList = computed(() => {
+  return seeds.value
+    .filter((s) => s.seedSql.trim())
+    .map((s, idx) => ({
+      id: s.clientId,
+      caseOrder: idx + 1,
+      seedSql: s.seedSql,
+      isSample: s.isSample ? 1 : 0,
+    }))
+})
+
+async function handleGenerateTemplate() {
+  if (!form.schemaSql.trim()) {
+    toast.error('请先在下方填写建表 DDL，以便解析表结构并生成样例模板')
+    return
+  }
+  const sampleSeed =
+    seeds.value.find((s) => s.isSample && s.seedSql.trim()) ||
+    seeds.value.find((s) => s.seedSql.trim())
+  const template = generateMarkdownTemplate(form.schemaSql, sampleSeed?.seedSql, form.title)
+
+  if (form.description.trim()) {
+    const ok = await confirm({
+      title: '生成标准题面模板',
+      message: '检测到当前题目描述已有内容。是否覆盖现有内容？（点击「确定覆盖」替换，点击「取消」则追加到末尾）',
+      confirmText: '确定覆盖',
+      cancelText: '追加至末尾',
+      danger: true,
+    })
+    if (ok) {
+      form.description = template
+      toast.success('已覆盖生成标准题面模板')
+    } else {
+      form.description += '\n\n' + template
+      toast.success('已将标准模板追加至描述末尾')
+    }
+  } else {
+    form.description = template
+    toast.success('已自动生成标准题面与示例表格')
+  }
 }
 
 async function loadQuestion() {
@@ -183,6 +230,19 @@ onMounted(() => {
           </FormField>
         </div>
         <FormField label="题目描述" required :error="formErrors.description">
+          <div class="editor-assistant-bar">
+            <span class="assistant-tip">
+              💡 规范题面建议包含题目要求、字段字典及样例输入/期望输出表格
+            </span>
+            <button
+              type="button"
+              class="btn-assistant"
+              title="根据下方建表 DDL 与测试点数据，自动生成标准 Markdown 模板"
+              @click="handleGenerateTemplate"
+            >
+              🪄 一键生成规范题面模板 (含输入/期望输出表)
+            </button>
+          </div>
           <MarkdownEditor v-model="form.description" placeholder="支持 Markdown 语法" />
         </FormField>
       </div>
@@ -192,6 +252,10 @@ onMounted(() => {
         <FormField label="建表 DDL" required :error="formErrors.schemaSql">
           <textarea v-model="form.schemaSql" class="input textarea sql-area" placeholder="CREATE TABLE ..." />
         </FormField>
+        <div v-if="form.schemaSql.trim()" class="preview-block">
+          <div class="preview-title">DDL 字典视图预览：</div>
+          <DbSchemaViewer compact :schema-sql="form.schemaSql" />
+        </div>
         <FormField label="标准答案 SQL" required :error="formErrors.referenceSql">
           <textarea
             v-model="form.referenceSql"
@@ -234,6 +298,12 @@ onMounted(() => {
           <FormField label="灌数据 SQL" required hint="INSERT / UPDATE 等初始化数据语句">
             <textarea v-model="s.seedSql" class="input textarea sql-area" placeholder="INSERT INTO ..." />
           </FormField>
+        </div>
+
+        <!-- 测试点数据表格全景预览 -->
+        <div v-if="sampleCasesList.length > 0 && form.schemaSql.trim()" class="preview-block">
+          <div class="preview-title">测试点数据网格全景预览：</div>
+          <DbSampleViewer :sample-cases="sampleCasesList" :schema-sql="form.schemaSql" />
         </div>
       </div>
 
@@ -332,5 +402,52 @@ onMounted(() => {
 .form-actions {
   display: flex;
   gap: 12px;
+}
+.editor-assistant-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px dashed var(--line);
+  font-size: 12px;
+}
+.assistant-tip {
+  color: var(--ink-secondary);
+}
+.btn-assistant {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.btn-assistant:hover {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+.preview-block {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.preview-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-secondary);
+  margin-bottom: 10px;
 }
 </style>

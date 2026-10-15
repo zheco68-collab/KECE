@@ -6,6 +6,7 @@ import { databaseApi } from '@/api/database'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import CodeEditor from '@/components/CodeEditor.vue'
+import DbSchemaViewer from '@/components/DbSchemaViewer.vue'
 import type { DbQuestion, DbQuestionType } from '@/types'
 import type { PracticeDetail, PracticePracticalQuestion } from '@/types/practice'
 
@@ -225,10 +226,7 @@ onBeforeUnmount(() => {
 
         <!-- 可折叠表结构参考面板 -->
         <div v-if="showSchema && question.schemaSql" class="schema-drawer">
-          <div class="schema-drawer-head">
-            <span>参考表结构 (Schema DDL)</span>
-          </div>
-          <pre class="schema-code">{{ question.schemaSql }}</pre>
+          <DbSchemaViewer compact :schema-sql="question.schemaSql" />
         </div>
 
         <!-- Monaco 代码编辑器 -->
@@ -495,26 +493,9 @@ onBeforeUnmount(() => {
 .schema-drawer {
   background: var(--bg);
   border-bottom: 1px solid var(--line);
-  max-height: 240px;
-  overflow-y: auto;
-}
-.schema-drawer-head {
-  padding: 8px 16px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--ink-secondary);
-}
-.schema-code {
-  margin: 0;
   padding: 12px 16px;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--ink);
-  white-space: pre-wrap;
-  word-break: break-all;
+  max-height: 280px;
+  overflow-y: auto;
 }
 
 .monaco-wrapper {

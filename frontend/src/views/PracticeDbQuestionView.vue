@@ -4,14 +4,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { practiceApi } from '@/api/practice'
 import { databaseApi } from '@/api/database'
 import { renderMarkdown } from '@/utils/markdown'
-import { useToast } from '@/composables/useToast'
 import type { DbQuestion, DbQuestionType } from '@/types'
 import type { PracticeDetail, PracticePracticalQuestion } from '@/types/practice'
-import { copyToClipboard } from '@/utils/clipboard'
+import DbSchemaViewer from '@/components/DbSchemaViewer.vue'
+import DbSampleViewer from '@/components/DbSampleViewer.vue'
 
 const route = useRoute()
 const router = useRouter()
-const { success, error: toastError } = useToast()
 
 const code = computed(() => String(route.params.code).toUpperCase())
 const practiceQuestionId = computed(() => Number(route.params.id))
@@ -33,16 +32,6 @@ const descriptionHtml = computed(() => renderMarkdown(question.value?.descriptio
 const sampleCases = computed(() =>
   (question.value?.testCases ?? []).filter((tc) => tc.isSample === 1),
 )
-
-async function copyText(text: string | null | undefined, label: string) {
-  if (!text) return
-  const ok = await copyToClipboard(text)
-  if (ok) {
-    success(`${label}已复制到剪贴板`)
-  } else {
-    toastError('复制失败，请手动选取复制')
-  }
-}
 
 function goToSubmit() {
   router.push(`/practice/${code.value}/db-question/${practiceQuestionId.value}/submit`)
@@ -177,41 +166,39 @@ onMounted(async () => {
         <div class="prose" v-html="descriptionHtml"></div>
       </article>
 
-      <!-- 表结构定义 (Schema DDL) 卡片 -->
-      <section class="schema-card card">
-        <div class="card-section-head">
-          <span class="sec-title">数据库表结构定义 (Schema DDL)</span>
-          <button class="btn-copy" @click="copyText(question.schemaSql, '建表语句')">
-            复制 DDL
-          </button>
-        </div>
-        <div class="schema-content">
-          <pre class="sql-code">{{ question.schemaSql }}</pre>
-        </div>
-      </section>
+      <!-- 数据库表结构字典 (支持字典视图/DDL切换) -->
+      <DbSchemaViewer :schema-sql="question.schemaSql" />
 
-      <!-- 样例数据卡片 -->
-      <section v-if="sampleCases.length" class="samples-card card">
-        <div class="card-section-head">
-          <span class="sec-title">样例初始数据 (Seed Data)</span>
-          <span class="sec-count">共 {{ sampleCases.length }} 组公开样例</span>
-        </div>
+      <!-- 样例初始数据 (支持数据表格视图/SQL切换) -->
+      <DbSampleViewer
+        v-if="sampleCases.length"
+        :sample-cases="sampleCases"
+        :schema-sql="question.schemaSql"
+      />
 
-        <div class="samples-grid">
-          <div
-            v-for="(tc, i) in sampleCases"
-            :key="tc.id ?? i"
-            class="sample-item card"
-          >
-            <div class="sample-item-head">
-              <span class="sample-idx">样例 #{{ i + 1 }}</span>
-              <button class="btn-copy" @click="copyText(tc.seedSql, `样例 #${i + 1} 初始数据`)">
-                复制初始 SQL
-              </button>
-            </div>
-            <div class="sample-sql-wrap">
-              <pre class="sql-code">{{ tc.seedSql || '（该样例无附加初始数据）' }}</pre>
-            </div>
+      <!-- 评测规范卡片 -->
+      <section class="spec-card card">
+        <div class="card-section-head">
+          <span class="sec-title">评测与比对规范</span>
+        </div>
+        <div class="spec-grid">
+          <div class="spec-item">
+            <span class="spec-label">行序比对规则</span>
+            <span class="spec-val" :class="{ 'is-order': question.orderSensitive }">
+              {{ question.orderSensitive ? '严格按行顺序比对（结果集行顺序必须与预期完全一致，请按题意使用 ORDER BY 排序）' : '无序集合比对（记录顺序不影响判定结果，系统将作为多重集合进行比对）' }}
+            </span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">列名与别名要求</span>
+            <span class="spec-val">
+              输出结果集的列名必须与题目要求严格一致。若涉及聚合或计算列（如 <code>COUNT</code>、<code>AVG</code>），请务必在 SQL 中通过 <code>AS 别名</code> 赋予指定列名。
+            </span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">沙箱环境与数据隔离</span>
+            <span class="spec-val">
+              每次提交评测均在独立隔离 MySQL 实例中拉起临时库，评测结束后自动销毁清理，不同测试点数据独立初始互不影响。
+            </span>
           </div>
         </div>
       </section>
@@ -586,5 +573,70 @@ onMounted(async () => {
   margin: 0;
   font-size: 14px;
   color: var(--ink-secondary);
+}
+
+/* 评测与比对规范卡片 */
+.spec-card {
+  padding: 20px 24px;
+  border-radius: 0;
+}
+.spec-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+.spec-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.spec-label {
+  width: 120px;
+  font-weight: 700;
+  color: var(--ink-secondary);
+  flex-shrink: 0;
+}
+.spec-val {
+  color: var(--ink);
+  flex: 1;
+}
+.spec-val.is-order {
+  color: #c92a2a;
+  font-weight: 600;
+}
+.spec-val code {
+  padding: 1px 5px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+}
+
+/* 题目描述中的 Markdown 表格样式 (如样例输入输出表) */
+.prose :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 13px;
+  border: 1px solid var(--line);
+}
+.prose :deep(th) {
+  background: #f7f7f8;
+  color: var(--ink);
+  font-weight: 700;
+  padding: 8px 12px;
+  text-align: left;
+  border: 1px solid var(--line);
+}
+.prose :deep(td) {
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+.prose :deep(tr:hover) {
+  background: #fcfcfc;
 }
 </style>

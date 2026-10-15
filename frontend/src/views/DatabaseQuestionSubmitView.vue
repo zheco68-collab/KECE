@@ -6,6 +6,7 @@ import { useUserStore } from '@/stores/user'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import CodeEditor from '@/components/CodeEditor.vue'
+import DbSchemaViewer from '@/components/DbSchemaViewer.vue'
 import type { DbQuestion, DbQuestionType } from '@/types'
 
 const route = useRoute()
@@ -197,10 +198,7 @@ onBeforeUnmount(() => {
 
         <!-- 可折叠表结构参考面板 -->
         <div v-if="showSchema && question.schemaSql" class="schema-drawer">
-          <div class="schema-drawer-head">
-            <span>参考表结构 (Schema DDL)</span>
-          </div>
-          <pre class="schema-code">{{ question.schemaSql }}</pre>
+          <DbSchemaViewer compact :schema-sql="question.schemaSql" />
         </div>
 
         <!-- Monaco 代码编辑器 -->
