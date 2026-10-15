@@ -202,21 +202,6 @@ onMounted(async () => {
           </div>
         </div>
       </section>
-
-      <!-- 底部操作导航卡片 -->
-      <footer class="q-footer-nav card">
-        <div class="footer-cta-text">
-          <span class="cta-tip-dot"></span>
-          <p class="cta-desc">准备好编写 SQL 了吗？进入 SQL 编写与执行环境，在线对拍结果集。</p>
-        </div>
-        <button class="btn btn-primary btn-submit-cta" @click="goToSubmit">
-          <span>前往提交 SQL</span>
-          <svg class="cta-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="5" y1="12" x2="19" y2="12" />
-            <polyline points="12 5 19 12 12 19" />
-          </svg>
-        </button>
-      </footer>
     </template>
   </div>
 </template>
@@ -547,33 +532,6 @@ onMounted(async () => {
   border-color: var(--ink);
 }
 
-/* 底部操作卡片 */
-.q-footer-nav {
-  padding: 20px 28px;
-  border-radius: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  background: var(--surface);
-  flex-wrap: wrap;
-}
-.footer-cta-text {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.cta-tip-dot {
-  width: 8px;
-  height: 8px;
-  background: var(--ink);
-  border-radius: 0;
-}
-.cta-desc {
-  margin: 0;
-  font-size: 14px;
-  color: var(--ink-secondary);
-}
 
 /* 评测与比对规范卡片 */
 .spec-card {
