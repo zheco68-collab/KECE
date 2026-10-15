@@ -86,14 +86,12 @@ async function copyCode(code?: string | null) {
 
 function openPractice(row: PracticeSummary) {
   if (!row.accessCode) return
-  const routeData = router.resolve(`/practice/${row.accessCode}`)
-  window.open(routeData.href, '_blank')
+  router.push(`/practice/${row.accessCode}`)
 }
 
 function openMonitor(row: PracticeSummary) {
   if (!row.accessCode) return
-  const routeData = router.resolve(`/practice/${row.accessCode}/monitor`)
-  window.open(routeData.href, '_blank')
+  router.push(`/practice/${row.accessCode}/monitor`)
 }
 
 async function endPractice(row: PracticeSummary) {
@@ -226,7 +224,7 @@ onMounted(load)
           <button
             class="action-btn btn-projector"
             type="button"
-            title="在新标签页查看课练实时与统计数据看板"
+            title="查看课练实时与统计数据看板"
             @click="openMonitor(row)"
           >
             课练数据

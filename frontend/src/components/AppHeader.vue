@@ -118,17 +118,16 @@ function logout() {
             </span>
           </RouterLink>
           <button class="btn btn-ghost btn-sm" @click="logout">退出</button>
-          <a
+          <RouterLink
             v-if="userStore.hasRole('ADMIN') || userStore.hasRole('TEACHER')"
-            href="/admin"
-            target="_blank"
+            to="/admin"
             class="btn btn-primary btn-sm admin-entry-btn"
           >
             <span>后台管理</span>
-            <svg class="external-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M3 1h8v8M11 1 5 7" />
+            <svg class="nav-arrow-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M2 6h8M6 2l4 4-4 4" />
             </svg>
-          </a>
+          </RouterLink>
         </template>
         <RouterLink v-else to="/login" class="btn btn-primary btn-sm">登录</RouterLink>
       </div>
@@ -311,7 +310,8 @@ function logout() {
   align-items: center;
   gap: 5px;
 }
-.external-icon {
+.external-icon,
+.nav-arrow-icon {
   width: 10px;
   height: 10px;
   stroke-width: 2;
