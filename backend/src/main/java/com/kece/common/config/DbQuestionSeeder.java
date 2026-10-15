@@ -560,5 +560,5 @@ public class DbQuestionSeeder {
                                             true),
                                     new Case(
                                             "INSERT INTO candidates VALUES (201, 'P1', 79, 'Ops'), (202, 'P2', 80, 'Ops');",
-                                            false)))));
+                                            false))));
 }
