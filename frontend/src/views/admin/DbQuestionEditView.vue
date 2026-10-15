@@ -27,6 +27,7 @@ const isEdit = computed(() => questionId.value !== null)
 const submitting = ref(false)
 const loading = ref(false)
 const pageError = ref('')
+const showLivePreview = ref(false)
 
 const form = reactive({
   title: '',
@@ -64,7 +65,7 @@ function addSeed() {
     clientId: ++seedSeq,
     seedSql: '',
     expectedOutput: '',
-    isSample: false,
+    isSample: seeds.value.length === 0, // 首个测试点默认设为样例
   })
 }
 
@@ -86,7 +87,7 @@ const sampleCasesList = computed(() => {
 
 async function handleGenerateTemplate() {
   if (!form.schemaSql.trim()) {
-    toast.error('请先在下方填写建表 DDL，以便解析表结构并生成样例模板')
+    toast.error('请先在上方填写建表 DDL，以便生成表结构与用例模板')
     return
   }
   const sampleSeed =
@@ -219,123 +220,187 @@ onMounted(() => {
     <p v-if="pageError" class="submit-error">{{ pageError }}</p>
 
     <div v-if="!loading" class="form-cards">
+      <!-- 1. 基本信息卡片 -->
       <div class="card form-card">
         <h2 class="card-title">基本信息</h2>
         <FormField label="标题" required :error="formErrors.title">
-          <input v-model="form.title" class="input" placeholder="题目标题" />
+          <input v-model="form.title" class="input" placeholder="题目标题，例如：查询研发部员工" />
         </FormField>
         <div class="field-row">
           <FormField label="题型" required>
             <select v-model="form.type" class="input">
-              <option value="SELECT">查询</option>
-              <option value="DML">变更</option>
+              <option value="SELECT">查询题 (SELECT)</option>
+              <option value="DML">数据变更题 (UPDATE / INSERT / DELETE)</option>
             </select>
           </FormField>
-          <FormField label="方言">
+          <FormField label="SQL 方言">
             <select v-model="form.dialect" class="input">
-              <option value="MYSQL">MySQL</option>
+              <option value="MYSQL">MySQL 8.0</option>
             </select>
           </FormField>
-          <FormField label="状态">
+          <FormField label="发布状态">
             <select v-model="form.status" class="input">
-              <option :value="1">公开</option>
-              <option :value="0">私有</option>
+              <option :value="1">公开 (学生端可见)</option>
+              <option :value="0">私有 (仅出题人可见)</option>
             </select>
           </FormField>
         </div>
-        <FormField label="题目描述" required :error="formErrors.description">
-          <div class="editor-assistant-bar">
-            <span class="assistant-tip">
-              规范题面建议包含题目要求、表结构说明及样例输入与期望输出表格
-            </span>
-            <button
-              type="button"
-              class="btn-assistant"
-              title="根据下方建表 DDL 与测试点数据，自动生成标准 Markdown 模板"
-              @click="handleGenerateTemplate"
-            >
-              生成标准题面模板
-            </button>
-          </div>
-          <MarkdownEditor v-model="form.description" placeholder="支持 Markdown 语法" />
-        </FormField>
       </div>
 
+      <!-- 2. SQL 定义与沙箱环境 -->
       <div class="card form-card">
-        <h2 class="card-title">SQL 定义</h2>
-        <FormField label="建表 DDL" required :error="formErrors.schemaSql">
-          <textarea v-model="form.schemaSql" class="input textarea sql-area" placeholder="CREATE TABLE ..." />
-        </FormField>
-        <div v-if="form.schemaSql.trim()" class="preview-block">
-          <div class="preview-title">DDL 字典视图预览：</div>
-          <DbSchemaViewer compact :schema-sql="form.schemaSql" />
+        <div class="card-head">
+          <h2 class="card-title">SQL 定义与环境</h2>
+          <label class="order-check">
+            <input v-model="form.orderSensitive" type="checkbox" />
+            <span>行序敏感（判题时要求结果集行顺序完全一致）</span>
+          </label>
         </div>
-        <FormField label="标准答案 SQL" required :error="formErrors.referenceSql">
+
+        <FormField
+          label="建表 DDL"
+          required
+          :error="formErrors.schemaSql"
+          hint="初始化表结构 SQL，该题所有测试用例共用此结构，学生题面完全可见"
+        >
+          <textarea
+            v-model="form.schemaSql"
+            class="input textarea sql-area"
+            placeholder="CREATE TABLE emp (id INT PRIMARY KEY, name VARCHAR(32), dept VARCHAR(16), salary DECIMAL(10,2));"
+          />
+        </FormField>
+
+        <FormField
+          label="标准答案 SQL"
+          required
+          :error="formErrors.referenceSql"
+          hint="出题人标准 SQL，判题机据此在沙箱中动态计算测试点标准结果集（仅管理员与出题人可见）"
+        >
           <textarea
             v-model="form.referenceSql"
             class="input textarea sql-area"
-            placeholder="SELECT ... / UPDATE ..."
+            placeholder="SELECT id, name FROM emp WHERE dept = 'RD'"
           />
         </FormField>
+
         <FormField
           v-if="form.type === 'DML'"
-          label="校验查询"
+          label="校验查询 SQL"
           required
           :error="formErrors.verifySql"
-          hint="DML 题判分用的校验 SELECT，查询题留空"
+          hint="数据变更题专用：在用户 SQL 执行后运行该校验 SELECT，通过比对数据表查询结果判定作答是否正确"
         >
-          <textarea v-model="form.verifySql" class="input textarea sql-area" placeholder="SELECT ..." />
+          <textarea
+            v-model="form.verifySql"
+            class="input textarea sql-area"
+            placeholder="SELECT id, name, dept, salary FROM emp ORDER BY id"
+          />
         </FormField>
-        <label class="order-check">
-          <input v-model="form.orderSensitive" type="checkbox" />
-          行序敏感（结果集按行顺序比对）
-        </label>
       </div>
 
+      <!-- 3. 数据测试点 -->
       <div class="card form-card">
         <div class="card-head">
-          <h2 class="card-title">数据测试点</h2>
-          <button class="btn btn-ghost btn-sm" type="button" @click="addSeed">添加测试点</button>
+          <div>
+            <h2 class="card-title">数据测试点</h2>
+            <p class="card-desc">为评测沙箱提供初始化数据（INSERT 等）。标记为“公开样例”的数据将展示在学生题面上。</p>
+          </div>
+          <button class="btn btn-outline btn-sm" type="button" @click="addSeed">+ 添加测试点</button>
         </div>
-        <p v-if="seeds.length === 0" class="muted">暂无测试点，请添加。</p>
+
+        <p v-if="seeds.length === 0" class="muted empty-tip">暂无测试点，请点击右上角按钮添加。</p>
+
         <div v-for="s in seeds" :key="s.clientId" class="case-card">
           <div class="case-head">
-            <span class="muted">测试点 #{{ s.clientId }}</span>
-            <label class="sample-check">
-              <input v-model="s.isSample" type="checkbox" />
-              样例用例
-            </label>
+            <div class="case-title-wrap">
+              <span class="case-num">测试点 #{{ s.clientId }}</span>
+              <label class="sample-check">
+                <input v-model="s.isSample" type="checkbox" />
+                <span>公开样例（展示在学生题面中）</span>
+              </label>
+            </div>
             <button class="btn btn-ghost btn-sm case-remove" type="button" @click="removeSeed(s.clientId)">
               删除
             </button>
           </div>
-          <FormField label="灌数据 SQL" required hint="INSERT / UPDATE 等初始化数据语句">
-            <textarea v-model="s.seedSql" class="input textarea sql-area" placeholder="INSERT INTO ..." />
+
+          <FormField label="初始数据 SQL" required hint="评测时先执行该语句向表中写入数据">
+            <textarea
+              v-model="s.seedSql"
+              class="input textarea sql-area"
+              placeholder="INSERT INTO emp VALUES (1, 'Alice', 'RD', 10000.00), (2, 'Bob', 'RD', 12000.00);"
+            />
           </FormField>
+
           <FormField
-            label="期望查询结果 (可选)"
-            hint="支持标准结果集 JSON（如 {&quot;columns&quot;:[...],&quot;rows&quot;:[...]}）或 Markdown 管道表格；公开样例填写后将直接在学生题面展现结果网格"
+            label="期望输出结果 (可选)"
+            hint="公开样例建议填写：可直接填写 Markdown 表格（如 | id | name |）或标准 JSON，题面将直接渲染输出表格供学生对照"
           >
             <textarea
               v-model="s.expectedOutput"
               class="input textarea sql-area"
-              placeholder='{"columns":[{"name":"id","type":"INT"},{"name":"name","type":"VARCHAR"}],"rows":[["1","Alice"],["2","Bob"]]}'
+              placeholder='| id | name |&#10;| 1  | Alice |&#10;| 2  | Bob   |'
             />
           </FormField>
         </div>
+      </div>
 
-        <!-- 测试点数据表格全景预览 -->
-        <div v-if="sampleCasesList.length > 0 && form.schemaSql.trim()" class="preview-block">
-          <div class="preview-title">测试点数据网格全景预览：</div>
-          <DbSampleViewer :sample-cases="sampleCasesList" :schema-sql="form.schemaSql" />
+      <!-- 4. 题目描述 -->
+      <div class="card form-card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">题目描述</h2>
+            <p class="card-desc">编写题目的业务背景、查询要求与说明。</p>
+          </div>
+          <button
+            type="button"
+            class="btn btn-outline btn-sm"
+            title="根据上方填写的建表 DDL 与测试点数据，自动生成包含表结构说明与样例表格的规范题面"
+            @click="handleGenerateTemplate"
+          >
+            一键导入上方表结构与用例模板
+          </button>
+        </div>
+        <FormField label="题面正文" required :error="formErrors.description">
+          <MarkdownEditor v-model="form.description" placeholder="支持 Markdown 语法编写题目描述" />
+        </FormField>
+      </div>
+
+      <!-- 5. 渲染效果实时预览卡片 (可折叠) -->
+      <div v-if="form.schemaSql.trim() || sampleCasesList.length > 0" class="card form-card preview-card">
+        <div class="card-head preview-head">
+          <div>
+            <h2 class="card-title">题面渲染效果预览</h2>
+            <p class="card-desc">预览学生端看到的表结构字典与测试样例表格渲染效果</p>
+          </div>
+          <button
+            type="button"
+            class="btn btn-outline btn-sm"
+            @click="showLivePreview = !showLivePreview"
+          >
+            {{ showLivePreview ? '收起预览' : '展开预览' }}
+          </button>
+        </div>
+
+        <div v-if="showLivePreview" class="preview-content">
+          <div v-if="form.schemaSql.trim()" class="preview-item">
+            <div class="preview-label">数据库表结构渲染预览：</div>
+            <DbSchemaViewer compact :schema-sql="form.schemaSql" />
+          </div>
+
+          <div v-if="sampleCasesList.length > 0 && form.schemaSql.trim()" class="preview-item">
+            <div class="preview-label">样例数据与期望结果预览：</div>
+            <DbSampleViewer :sample-cases="sampleCasesList" :schema-sql="form.schemaSql" />
+          </div>
         </div>
       </div>
 
+      <!-- 底部提交操作栏 -->
       <div class="form-actions">
         <button class="btn btn-primary" type="button" :disabled="submitting" @click="save">
-          {{ submitting ? '保存中…' : '保存' }}
+          {{ submitting ? '保存中…' : '保存题目' }}
         </button>
-        <button class="btn btn-ghost" type="button" :disabled="submitting" @click="router.back()">
+        <button class="btn btn-outline" type="button" :disabled="submitting" @click="router.back()">
           取消
         </button>
       </div>
@@ -360,20 +425,27 @@ onMounted(() => {
 }
 .form-card {
   padding: 20px 22px;
+  border-radius: 0;
 }
 .card-title {
-  margin: 0 0 16px;
+  margin: 0;
   font-size: 16px;
   font-weight: 600;
+  color: var(--ink);
+}
+.card-desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--ink-secondary);
+  font-weight: normal;
 }
 .card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
-}
-.card-head .card-title {
-  margin: 0;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 .field-row {
   display: flex;
@@ -381,6 +453,21 @@ onMounted(() => {
 }
 .field-row > * {
   flex: 1;
+}
+.order-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-secondary);
+  cursor: pointer;
+}
+.order-check input {
+  cursor: pointer;
+}
+.empty-tip {
+  margin: 8px 0 14px;
+  font-size: 13px;
 }
 .case-card {
   border: 1px solid var(--line);
@@ -391,8 +478,18 @@ onMounted(() => {
 .case-head {
   display: flex;
   align-items: center;
-  gap: 16px;
+  justify-content: space-between;
   margin-bottom: 12px;
+}
+.case-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.case-num {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
 }
 .sample-check {
   display: inline-flex;
@@ -400,24 +497,19 @@ onMounted(() => {
   gap: 6px;
   font-size: 13px;
   color: var(--ink-secondary);
+  cursor: pointer;
 }
 .case-remove {
-  margin-left: auto;
-}
-.order-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  color: var(--ink-secondary);
+  color: var(--danger);
 }
 .textarea {
   height: auto;
-  min-height: 88px;
+  min-height: 84px;
   padding: 10px 12px;
   resize: vertical;
   line-height: 1.5;
   font-family: inherit;
+  border-radius: 0;
 }
 .sql-area {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -426,52 +518,31 @@ onMounted(() => {
 .form-actions {
   display: flex;
   gap: 12px;
+  margin-top: 8px;
 }
-.editor-assistant-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
-  padding: 8px 12px;
-  background: var(--bg);
+.preview-card {
   border: 1px dashed var(--line);
-  font-size: 12px;
-}
-.assistant-tip {
-  color: var(--ink-secondary);
-}
-.btn-assistant {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s ease;
-}
-.btn-assistant:hover {
-  background: var(--ink);
-  color: #fff;
-  border-color: var(--ink);
-}
-.preview-block {
-  margin-top: 14px;
-  padding: 14px 16px;
   background: var(--bg);
-  border: 1px solid var(--line);
 }
-.preview-title {
+.preview-head {
+  margin-bottom: 0;
+}
+.preview-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--line);
+}
+.preview-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.preview-label {
   font-size: 12px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
   color: var(--ink-secondary);
-  margin-bottom: 10px;
 }
 </style>
