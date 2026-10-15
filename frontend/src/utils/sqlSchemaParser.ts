@@ -79,17 +79,51 @@ function splitTopLevelCommas(str: string): string[] {
 export function parseSchemaSql(schemaSql: string): ParsedTableSchema[] {
   if (!schemaSql || !schemaSql.trim()) return []
 
+  // 1. 清理 SQL 单行与多行注释
+  let cleaned = schemaSql.replace(/\/\*[\s\S]*?\*\//g, '')
+  cleaned = cleaned.replace(/--.*$/gm, '')
+
   const tables: ParsedTableSchema[] = []
-  // 正则匹配 CREATE TABLE [IF NOT EXISTS] tableName ( body );
-  const createTableRegex =
-    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([`\w]+)\s*\(([\s\S]*?)\)(?:\s*ENGINE\s*=\s*\w+)?(?:\s*DEFAULT\s+CHARSET\s*=\s*\w+)?(?:\s*COLLATE\s*=\s*[\w_]+)?\s*;/gi
-
+  // 匹配 CREATE TABLE [IF NOT EXISTS] tableName (
+  const createRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([`\w]+)\s*\(/gi
   let match: RegExpExecArray | null
-  while ((match = createTableRegex.exec(schemaSql)) !== null) {
-    const tableName = cleanIdentifier(match[1])
-    const body = match[2]
-    const defs = splitTopLevelCommas(body)
 
+  while ((match = createRegex.exec(cleaned)) !== null) {
+    const tableName = cleanIdentifier(match[1])
+    const startIdx = match.index + match[0].length
+    let depth = 1
+    let inQuote: string | null = null
+    let endIdx = -1
+
+    // 基于括号深度精确找到该表的闭合括号，无惧任何复杂的表级选项或引擎参数
+    for (let i = startIdx; i < cleaned.length; i++) {
+      const ch = cleaned[i]
+      if (inQuote) {
+        if (ch === inQuote && cleaned[i - 1] !== '\\') {
+          inQuote = null
+        }
+      } else if (ch === "'" || ch === '"' || ch === '`') {
+        inQuote = ch
+      } else if (ch === '(') {
+        depth++
+      } else if (ch === ')') {
+        depth--
+        if (depth === 0) {
+          endIdx = i
+          break
+        }
+      }
+    }
+
+    if (endIdx === -1) continue
+
+    const body = cleaned.substring(startIdx, endIdx)
+    let semiIdx = cleaned.indexOf(';', endIdx)
+    if (semiIdx === -1) semiIdx = cleaned.length
+    const rawSql = cleaned.substring(match.index, semiIdx + 1).trim()
+    createRegex.lastIndex = semiIdx + 1
+
+    const defs = splitTopLevelCommas(body)
     const columns: ColumnDefinition[] = []
     const pkColumns = new Set<string>()
 
@@ -106,7 +140,7 @@ export function parseSchemaSql(schemaSql: string): ParsedTableSchema[] {
     // 第二遍解析各个字段定义
     for (const def of defs) {
       const line = def.trim()
-      // 跳过纯表级约束（PRIMARY KEY、KEY、INDEX、CONSTRAINT、UNIQUE KEY、FOREIGN KEY）
+      // 跳过纯表级约束（PRIMARY KEY、KEY、INDEX、CONSTRAINT、UNIQUE KEY、FOREIGN KEY 等）
       if (
         /^(?:PRIMARY\s+KEY|KEY|INDEX|CONSTRAINT|UNIQUE\s+KEY|FOREIGN\s+KEY)\b/i.test(
           line,
@@ -155,7 +189,7 @@ export function parseSchemaSql(schemaSql: string): ParsedTableSchema[] {
     tables.push({
       tableName,
       columns,
-      rawSql: match[0].trim(),
+      rawSql,
     })
   }
 
@@ -226,13 +260,17 @@ export function parseSeedSql(
 ): ParsedSeedTable[] {
   if (!seedSql || !seedSql.trim()) return []
 
+  // 清理 SQL 注释
+  let cleaned = seedSql.replace(/\/\*[\s\S]*?\*\//g, '')
+  cleaned = cleaned.replace(/--.*$/gm, '')
+
   const result: ParsedSeedTable[] = []
   // 匹配 INSERT INTO tableName [(col1, col2)] VALUES (...);
   const insertRegex =
     /INSERT\s+INTO\s+([`\w]+)(?:\s*\(([^)]+)\))?\s+VALUES\s*([\s\S]*?)(?:;|$)/gi
 
   let match: RegExpExecArray | null
-  while ((match = insertRegex.exec(seedSql)) !== null) {
+  while ((match = insertRegex.exec(cleaned)) !== null) {
     const tableName = cleanIdentifier(match[1])
     const explicitCols = match[2]
       ? match[2].split(',').map((c) => cleanIdentifier(c))
@@ -259,12 +297,23 @@ export function parseSeedSql(
       columns = rows[0].map((_, idx) => `col_${idx + 1}`)
     }
 
-    result.push({
-      tableName,
-      columns,
-      rows,
-      rawSql: match[0].trim(),
-    })
+    // 若同一张表已存在（例如分多次 INSERT 写入同一张表），直接追加数据行
+    const existing = result.find(
+      (r) => r.tableName.toLowerCase() === tableName.toLowerCase(),
+    )
+    if (existing) {
+      existing.rows.push(...rows)
+      if (existing.columns.length === 0 && columns.length > 0) {
+        existing.columns = columns
+      }
+    } else {
+      result.push({
+        tableName,
+        columns,
+        rows,
+        rawSql: match[0].trim(),
+      })
+    }
   }
 
   return result

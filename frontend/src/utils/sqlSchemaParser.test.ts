@@ -70,5 +70,45 @@ describe('sqlSchemaParser', () => {
     expect(res2?.rows).toHaveLength(2)
     expect(res2?.rows[0]).toEqual(['HR', '9000.00'])
   })
+
+  it('parses multiple tables and merges multi-statement seed inserts', () => {
+    const multiDdl = `
+      -- 部门表
+      CREATE TABLE dept (
+        id INT PRIMARY KEY,
+        dept_name VARCHAR(32) NOT NULL COMMENT '部门名称'
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='部门表';
+
+      -- 员工表带外键约束
+      CREATE TABLE emp (
+        id INT PRIMARY KEY,
+        name VARCHAR(32) NOT NULL,
+        dept_id INT,
+        salary DECIMAL(10,2) DEFAULT 0.00,
+        CONSTRAINT fk_dept FOREIGN KEY (dept_id) REFERENCES dept(id)
+      ) ENGINE=InnoDB;
+    `
+    const tables = parseSchemaSql(multiDdl)
+    expect(tables).toHaveLength(2)
+    expect(tables[0].tableName).toBe('dept')
+    expect(tables[0].columns).toHaveLength(2)
+    expect(tables[1].tableName).toBe('emp')
+    expect(tables[1].columns).toHaveLength(4)
+
+    const multiSeed = `
+      -- 初始化部门
+      INSERT INTO dept VALUES (1, '研发部'), (2, '运营部');
+      -- 分两次插入员工
+      INSERT INTO emp VALUES (1, '张三', 1, 12000.00);
+      INSERT INTO emp VALUES (2, '李四', 1, 15000.00), (3, '王五', 2, 9000.00);
+    `
+    const seeds = parseSeedSql(multiSeed, tables)
+    expect(seeds).toHaveLength(2)
+    expect(seeds[0].tableName).toBe('dept')
+    expect(seeds[0].rows).toHaveLength(2)
+    expect(seeds[1].tableName).toBe('emp')
+    expect(seeds[1].columns).toEqual(['id', 'name', 'dept_id', 'salary'])
+    expect(seeds[1].rows).toHaveLength(3) // 自动合并为 3 条数据
+  })
 })
 
