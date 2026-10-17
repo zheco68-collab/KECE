@@ -23,13 +23,18 @@ const submitting = ref(false)
 const loading = ref(false)
 const pageError = ref('')
 
+const initialType = (route.query.type as ObjectiveType) || 'SINGLE'
+const validInitialType: ObjectiveType = ['SINGLE', 'MULTIPLE', 'JUDGE', 'FILL'].includes(initialType)
+  ? initialType
+  : 'SINGLE'
+
 const form = reactive({
-  type: 'SINGLE' as ObjectiveType,
+  type: validInitialType,
   status: 1,
   content: '',
-  answer: '',
+  answer: validInitialType === 'JUDGE' ? '对' : '',
   matchType: 'EXACT' as MatchType,
-  score: 5,
+  score: validInitialType === 'JUDGE' ? 2 : 5,
 })
 
 const options = ref<string[]>(['', ''])
@@ -43,11 +48,13 @@ const formErrors = reactive({
 
 const isChoice = computed(() => form.type === 'SINGLE' || form.type === 'MULTIPLE')
 const isFill = computed(() => form.type === 'FILL')
+const isJudge = computed(() => form.type === 'JUDGE')
 
 /** 答案占位提示随题型变化。 */
 const answerHint = computed(() => {
   if (form.type === 'SINGLE') return '如 A（单选填一个选项字母）'
   if (form.type === 'MULTIPLE') return '如 A,C（多选按字母排序、逗号分隔）'
+  if (form.type === 'JUDGE') return '请点击下方选择 对 或 错'
   return '填空关键字或正则表达式'
 })
 
@@ -62,8 +69,12 @@ function removeOption(index: number) {
 // 切换题型时重置答案，避免残留不匹配的内容。
 watch(
   () => form.type,
-  () => {
-    form.answer = ''
+  (newType) => {
+    if (newType === 'JUDGE') {
+      form.answer = '对'
+    } else {
+      form.answer = ''
+    }
     form.matchType = 'EXACT'
   },
 )
@@ -99,6 +110,10 @@ function validate(): boolean {
     if (filled.length < 2) {
       optionsError.value = '选择题至少需要 2 个选项'
     }
+  } else if (isJudge.value) {
+    if (form.answer !== '对' && form.answer !== '错') {
+      formErrors.answer = '判断题答案必须为对或错'
+    }
   }
   return !formErrors.content && !formErrors.answer && !formErrors.score && !optionsError.value
 }
@@ -115,7 +130,11 @@ async function save() {
       answer: form.answer.trim(),
       matchType: isFill.value ? form.matchType : undefined,
       score: form.score,
-      options: isChoice.value ? options.value.map((o) => o.trim()).filter((o) => o !== '') : undefined,
+      options: isJudge.value
+        ? ['对', '错']
+        : isChoice.value
+          ? options.value.map((o) => o.trim()).filter((o) => o !== '')
+          : undefined,
     }
     if (questionId.value) {
       await objectiveApi.update(questionId.value, body)
@@ -154,6 +173,7 @@ onMounted(() => {
             <select v-model="form.type" class="input">
               <option value="SINGLE">单选</option>
               <option value="MULTIPLE">多选</option>
+              <option value="JUDGE">判断</option>
               <option value="FILL">填空</option>
             </select>
           </FormField>
@@ -194,7 +214,25 @@ onMounted(() => {
 
       <div class="card form-card">
         <h2 class="card-title">答案</h2>
-        <FormField label="答案" required :error="formErrors.answer" :hint="answerHint">
+        <div v-if="isJudge" class="judge-answer-picker">
+          <label
+            class="judge-answer-btn"
+            :class="{ active: form.answer === '对' }"
+            @click="form.answer = '对'"
+          >
+            <span class="judge-icon">✓</span>
+            <span class="judge-text">对（正确）</span>
+          </label>
+          <label
+            class="judge-answer-btn"
+            :class="{ active: form.answer === '错' }"
+            @click="form.answer = '错'"
+          >
+            <span class="judge-icon">✕</span>
+            <span class="judge-text">错（错误）</span>
+          </label>
+        </div>
+        <FormField v-else label="答案" required :error="formErrors.answer" :hint="answerHint">
           <input v-model="form.answer" class="input" :placeholder="answerHint" />
         </FormField>
         <FormField v-if="isFill" label="匹配方式">
@@ -278,5 +316,37 @@ onMounted(() => {
 .form-actions {
   display: flex;
   gap: 12px;
+}
+.judge-answer-picker {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+}
+.judge-answer-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  transition: all 0.15s ease;
+}
+.judge-answer-btn:hover {
+  border-color: var(--ink-tertiary);
+}
+.judge-answer-btn.active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+.judge-icon {
+  font-size: 18px;
+  font-weight: 700;
 }
 </style>

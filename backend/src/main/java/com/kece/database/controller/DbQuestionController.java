@@ -39,10 +39,11 @@ public class DbQuestionController {
     public ApiResponse<PageResult<DbQuestionVO>> list(
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String userStatus,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "false") boolean all) {
-        return ApiResponse.success(questionService.list(type, keyword, page, size, all));
+        return ApiResponse.success(questionService.list(type, keyword, userStatus, page, size, all));
     }
 
     @Operation(summary = "数据库题目详情")

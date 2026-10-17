@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.kece.exam.mapper.ExamStudentInfoMapper">
+
+    <resultMap id="BaseResultMap" type="com.kece.exam.entity.ExamStudentInfo">
+        <id column="id" property="id"/>
+        <result column="exam_id" property="examId"/>
+        <result column="user_id" property="userId"/>
+        <result column="real_name" property="realName"/>
+        <result column="student_no" property="studentNo"/>
+        <result column="college" property="college"/>
+        <result column="major" property="major"/>
+        <result column="class_name" property="className"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="findByExamAndUser" resultMap="BaseResultMap">
+        SELECT * FROM `exam_student_info`
+        WHERE `exam_id` = #{examId} AND `user_id` = #{userId}
+        LIMIT 1
+    </select>
+
+    <select id="findByExamId" resultMap="BaseResultMap">
+        SELECT * FROM `exam_student_info`
+        WHERE `exam_id` = #{examId}
+        ORDER BY `id` ASC
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO `exam_student_info` (`exam_id`, `user_id`, `real_name`, `student_no`, `college`, `major`, `class_name`)
+        VALUES (#{examId}, #{userId}, #{realName}, #{studentNo}, #{college}, #{major}, #{className})
+    </insert>
+
+    <update id="update">
+        UPDATE `exam_student_info`
+        SET `real_name` = #{realName},
+            `student_no` = #{studentNo},
+            `college` = #{college},
+            `major` = #{major},
+            `class_name` = #{className}
+        WHERE `exam_id` = #{examId} AND `user_id` = #{userId}
+    </update>
+
+    <delete id="deleteByExamId">
+        DELETE FROM `exam_student_info` WHERE `exam_id` = #{examId}
+    </delete>
+
+</mapper>

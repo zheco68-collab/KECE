@@ -15,6 +15,7 @@ export interface LoginPayload {
 export const authApi = {
   register: (payload: RegisterPayload) => http.post<AuthResult>('/auth/register', payload),
   login: (payload: LoginPayload) => http.post<AuthResult>('/auth/login', payload),
+  refresh: (refreshToken: string) => http.post<AuthResult>('/auth/refresh', { refreshToken }),
   logout: () => http.post<void>('/auth/logout'),
   me: () => http.get<UserInfo>('/auth/me'),
 }

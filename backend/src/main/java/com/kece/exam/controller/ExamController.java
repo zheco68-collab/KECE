@@ -29,6 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class ExamController {
 
     private final ExamService examService;
+    private final com.kece.exam.service.ExamAdminService examAdminService;
+    private final com.kece.exam.service.ExamExportService examExportService;
 
     @Operation(summary = "考试列表（分页/筛选）")
     @GetMapping
@@ -51,6 +53,45 @@ public class ExamController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.success(examService.listAdmin(keyword, status, createdBy, page, size));
+    }
+
+    @Operation(summary = "教师查看考试考生答卷总览与成绩看板")
+    @RequireRole({Role.TEACHER, Role.ADMIN})
+    @GetMapping("/{id}/admin-overview")
+    public ApiResponse<com.kece.exam.dto.ExamAdminOverviewVO> adminOverview(@PathVariable Long id) {
+        return ApiResponse.success(examAdminService.getAdminOverview(id));
+    }
+
+    @Operation(summary = "教师查看指定考生的完整作答试卷明细")
+    @RequireRole({Role.TEACHER, Role.ADMIN})
+    @GetMapping("/{id}/students/{userId}/paper")
+    public ApiResponse<com.kece.exam.dto.ExamStudentPaperVO> studentPaper(
+            @PathVariable Long id, @PathVariable Long userId) {
+        return ApiResponse.success(examAdminService.getStudentPaper(id, userId));
+    }
+
+    @Operation(summary = "查看标准空白试卷模板（A 卷）")
+    @RequireRole({Role.TEACHER, Role.ADMIN})
+    @GetMapping("/{id}/paper-template")
+    public ApiResponse<com.kece.exam.dto.ExamStudentPaperVO> paperTemplate(@PathVariable Long id) {
+        return ApiResponse.success(examAdminService.getStudentPaper(id, null));
+    }
+
+    @Operation(summary = "导出考试试卷/学生答卷文档（支持 Word .doc 与 打印 PDF 视图）")
+    @RequireRole({Role.TEACHER, Role.ADMIN})
+    @GetMapping("/{id}/export")
+    public void exportDocument(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "word") String format,
+            @RequestParam(required = false) Long studentId,
+            jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
+        if ("pdf".equalsIgnoreCase(format)) {
+            String html = examExportService.getPrintableHtml(id, studentId);
+            response.setContentType("text/html;charset=UTF-8");
+            response.getWriter().write(html);
+        } else {
+            examExportService.exportWord(id, studentId, response);
+        }
     }
 
     @Operation(summary = "考试详情（含题目快照）")

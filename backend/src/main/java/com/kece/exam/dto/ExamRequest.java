@@ -32,6 +32,15 @@ public class ExamRequest {
     /** 状态：1公开 0私有。 */
     private Integer status;
 
+    /** 进入考试是否需要填写学生信息 1是 0否。 */
+    private Integer requireStudentInfo;
+
+    /** 学校/所属机构名称。 */
+    private String schoolName;
+
+    /** 学期/考核类别描述。 */
+    private String semester;
+
     @NotNull(message = "试卷至少包含一道题目")
     @Size(min = 1, message = "试卷至少包含一道题目")
     private List<ExamQuestionRequest> questions;

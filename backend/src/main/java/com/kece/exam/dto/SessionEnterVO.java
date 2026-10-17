@@ -35,6 +35,18 @@ public class SessionEnterVO {
     /** 距结束剩余秒数（倒计时依据）。 */
     private long remainingSeconds;
 
+    /** 是否要求填写考生信息。 */
+    private Boolean requireStudentInfo;
+
+    /** 当前考生是否已登记考生信息。 */
+    private Boolean hasFilledStudentInfo;
+
+    /** 当前考生的登记信息。 */
+    private ExamStudentInfoVO studentInfo;
+
     /** 题目快照 + 实时题面（按 sort_order）。 */
     private List<ExamSessionQuestionVO> questions;
+
+    /** 考生已暂存的题目作答映射：key 为 examQuestionId。 */
+    private java.util.Map<Long, UserSavedAnswerVO> myAnswers;
 }

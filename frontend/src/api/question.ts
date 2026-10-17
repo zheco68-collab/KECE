@@ -4,6 +4,7 @@ import type { Difficulty, PageResult, Question, TestCase } from '@/types'
 export interface QuestionListParams {
   keyword?: string
   difficulty?: string
+  userStatus?: string
   page?: number
   size?: number
 }

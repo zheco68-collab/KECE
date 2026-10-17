@@ -27,12 +27,31 @@ const loadError = ref('');
 const columns = [
   { key: 'id', label: 'ID', width: '64px' },
   { key: 'title', label: '试卷' },
-  { key: 'mode', label: '赛制', width: '80px' },
-  { key: 'status', label: '状态', width: '80px' },
-  { key: 'durationMinutes', label: '时长(分)', width: '90px' },
-  { key: 'startTime', label: '开考窗口', width: '160px' },
-  { key: 'endTime', label: '最晚开考', width: '160px' },
+  { key: 'sessionStatus', label: '考务状态', width: '90px' },
+  { key: 'mode', label: '赛制', width: '70px' },
+  { key: 'status', label: '可见性', width: '70px' },
+  { key: 'durationMinutes', label: '时长(分)', width: '85px' },
+  { key: 'startTime', label: '开考窗口', width: '150px' },
+  { key: 'endTime', label: '最晚开考', width: '150px' },
 ];
+
+function sessionStatusLabel(status: string | null): string {
+  if (status === 'ENDED') return '已结束';
+  if (status === 'ONGOING') return '进行中';
+  if (status === 'CANCELLED') return '已取消';
+  return '未开考';
+}
+
+function sessionStatusClass(status: string | null): string {
+  if (status === 'ENDED') return 'status-ended';
+  if (status === 'ONGOING') return 'status-ongoing';
+  if (status === 'CANCELLED') return 'status-cancelled';
+  return 'status-upcoming';
+}
+
+function exportBlankDoc(examId: number) {
+  examApi.downloadWord(examId);
+}
 
 async function load() {
   loading.value = true;
@@ -120,6 +139,11 @@ onMounted(load);
       row-key="id"
       empty-text="暂无试卷"
     >
+      <template #cell-sessionStatus="{ row }">
+        <span class="badge" :class="sessionStatusClass(row.sessionStatus)">
+          {{ sessionStatusLabel(row.sessionStatus) }}
+        </span>
+      </template>
       <template #cell-mode="{ row }">
         <span class="badge" :class="row.mode === 'ACM' ? 'mode-acm' : 'mode-oi'">
           {{ row.mode === 'ACM' ? 'ACM' : 'OI' }}
@@ -137,6 +161,21 @@ onMounted(load);
         <span class="time">{{ formatTime(row.endTime) }}</span>
       </template>
       <template #actions="{ row }">
+        <button
+          class="btn btn-ghost btn-sm btn-highlight"
+          type="button"
+          @click="router.push(`/admin/exams/${row.id}/papers`)"
+        >
+          成绩与查卷
+        </button>
+        <button
+          class="btn btn-ghost btn-sm"
+          type="button"
+          @click="exportBlankDoc(row.id)"
+          title="导出标准 A 卷 Word 文档"
+        >
+          导出 A 卷
+        </button>
         <button
           class="btn btn-ghost btn-sm"
           type="button"
@@ -194,5 +233,25 @@ onMounted(load);
 }
 .btn-danger {
   color: var(--danger);
+}
+.btn-highlight {
+  color: #1971c2;
+  font-weight: 600;
+}
+.status-ended {
+  background: #f1f3f5;
+  color: #495057;
+}
+.status-ongoing {
+  background: #ebfbee;
+  color: #2b8a3e;
+}
+.status-upcoming {
+  background: #e7f5ff;
+  color: #1c7ed6;
+}
+.status-cancelled {
+  background: #fff5f5;
+  color: #fa5252;
 }
 </style>

@@ -18,6 +18,8 @@ import com.kece.objective.entity.ObjectiveQuestion;
 import com.kece.objective.entity.ObjectiveSubmission;
 import com.kece.objective.mapper.ObjectiveQuestionMapper;
 import com.kece.objective.mapper.ObjectiveSubmissionMapper;
+import com.kece.user.entity.User;
+import com.kece.user.mapper.UserMapper;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,6 +34,7 @@ public class ObjectiveQuestionService {
     private final ObjectiveSubmissionMapper submissionMapper;
     private final ObjectiveGrader grader;
     private final ObjectMapper objectMapper;
+    private final UserMapper userMapper;
 
     /** 做题侧公开列表：只显示公开题。 */
     public PageResult<ObjectiveQuestionVO> list(String type, String keyword, int page, int size) {
@@ -40,8 +43,10 @@ public class ObjectiveQuestionService {
         int offset = (safePage - 1) * safeSize;
         List<ObjectiveQuestion> items = mapper.findPage(type, keyword, 1, null, offset, safeSize);
         long total = mapper.count(type, keyword, 1, null);
+        AuthUser user = AuthContextHolder.get();
+        java.util.Map<Long, User> authorMap = getAuthorMap(items);
         return new PageResult<>(
-                items.stream().map(q -> toVO(q, isPrivileged(q))).toList(),
+                items.stream().map(q -> toVO(q, isPrivileged(q, user), authorMap.get(q.getCreatedBy()))).toList(),
                 total,
                 safePage,
                 safeSize);
@@ -69,8 +74,9 @@ public class ObjectiveQuestionService {
         List<ObjectiveQuestion> items =
                 mapper.findPage(type, keyword, status, targetCreatedBy, offset, safeSize);
         long total = mapper.count(type, keyword, status, targetCreatedBy);
+        java.util.Map<Long, User> authorMap = getAuthorMap(items);
         return new PageResult<>(
-                items.stream().map(q -> toVO(q, isPrivileged(q))).toList(),
+                items.stream().map(q -> toVO(q, isPrivileged(q, user), authorMap.get(q.getCreatedBy()))).toList(),
                 total,
                 safePage,
                 safeSize);
@@ -180,10 +186,14 @@ public class ObjectiveQuestionService {
     /** 客观题作答记录：默认本人记录，可指定 targetUserId 查看该用户作答，按 id 倒序分页；correct 为 null 表示不筛对错。 */
     public PageResult<ObjectiveSubmissionListVO> listSubmissions(
             Long targetUserId, Integer correct, int page, int size) {
-        Long userId = targetUserId != null ? targetUserId : AuthContextHolder.currentUserId();
-        if (userId == null) {
+        AuthUser user = AuthContextHolder.get();
+        if (user == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
+        if (targetUserId != null && !targetUserId.equals(user.getId()) && !user.hasRole(Role.ADMIN) && !user.hasRole(Role.TEACHER)) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "无权查看其他用户的客观题作答记录");
+        }
+        Long userId = targetUserId != null ? targetUserId : user.getId();
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(size, 1), 100);
         int offset = (safePage - 1) * safeSize;
@@ -228,7 +238,7 @@ public class ObjectiveQuestionService {
         if (user == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
-        if (user.hasRole(Role.ADMIN) || question.getCreatedBy().equals(user.getId())) {
+        if (user.hasRole(Role.ADMIN) || java.util.Objects.equals(question.getCreatedBy(), user.getId())) {
             return;
         }
         throw new BusinessException(ResultCode.FORBIDDEN);
@@ -236,14 +246,17 @@ public class ObjectiveQuestionService {
 
     /** 答案可见性：管理员或出题人本人。 */
     private boolean isPrivileged(ObjectiveQuestion question) {
-        AuthUser user = AuthContextHolder.get();
+        return isPrivileged(question, AuthContextHolder.get());
+    }
+
+    private boolean isPrivileged(ObjectiveQuestion question, AuthUser user) {
         if (user == null) {
             return false;
         }
         if (user.hasRole(Role.ADMIN)) {
             return true;
         }
-        return question.getCreatedBy().equals(user.getId());
+        return java.util.Objects.equals(question.getCreatedBy(), user.getId());
     }
 
     private boolean canManage(ObjectiveQuestion question) {
@@ -254,20 +267,54 @@ public class ObjectiveQuestionService {
         if (user.hasRole(Role.ADMIN)) {
             return true;
         }
-        return question.getCreatedBy().equals(user.getId());
+        return java.util.Objects.equals(question.getCreatedBy(), user.getId());
+    }
+
+    private java.util.Map<Long, User> getAuthorMap(List<ObjectiveQuestion> items) {
+        java.util.Set<Long> authorIds = items.stream()
+                .map(ObjectiveQuestion::getCreatedBy)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        java.util.Map<Long, User> authorMap = new java.util.HashMap<>();
+        for (Long uid : authorIds) {
+            try {
+                User u = userMapper.findById(uid);
+                if (u != null) {
+                    authorMap.put(uid, u);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return authorMap;
     }
 
     private void applyRequest(ObjectiveQuestion question, ObjectiveQuestionRequest request) {
-        question.setType(request.getType());
+        String type = request.getType() != null ? request.getType().trim().toUpperCase() : "";
+        question.setType(type);
         question.setContent(request.getContent());
-        question.setOptions(toOptionsJson(request.getOptions()));
-        question.setAnswer(request.getAnswer());
+        if ("JUDGE".equals(type)) {
+            // 判断题固定只有对和错两个选项
+            question.setOptions(toOptionsJson(List.of("对", "错")));
+            String rawAns = request.getAnswer() != null ? request.getAnswer().trim() : "";
+            if (rawAns.equals("对") || rawAns.equals("正确") || rawAns.equalsIgnoreCase("TRUE")
+                    || rawAns.equalsIgnoreCase("T") || rawAns.equalsIgnoreCase("A") || rawAns.equals("1")) {
+                question.setAnswer("对");
+            } else if (rawAns.equals("错") || rawAns.equals("错误") || rawAns.equalsIgnoreCase("FALSE")
+                    || rawAns.equalsIgnoreCase("F") || rawAns.equalsIgnoreCase("B") || rawAns.equals("0")) {
+                question.setAnswer("错");
+            } else {
+                throw new BusinessException(ResultCode.PARAM_ERROR, "判断题答案只能是对或错");
+            }
+        } else {
+            question.setOptions(toOptionsJson(request.getOptions()));
+            question.setAnswer(request.getAnswer());
+        }
         question.setMatchType(request.getMatchType() == null ? "EXACT" : request.getMatchType());
         question.setScore(request.getScore() == null ? 5 : request.getScore());
         question.setStatus(request.getStatus() == null ? 1 : request.getStatus());
     }
 
-    private ObjectiveQuestionVO toVO(ObjectiveQuestion question, boolean privileged) {
+    private ObjectiveQuestionVO toVO(ObjectiveQuestion question, boolean privileged, User author) {
         return ObjectiveQuestionVO.builder()
                 .id(question.getId())
                 .type(question.getType())
@@ -277,10 +324,23 @@ public class ObjectiveQuestionService {
                 .matchType(question.getMatchType())
                 .score(question.getScore())
                 .createdBy(question.getCreatedBy())
+                .authorName(author != null ? author.getUsername() : null)
+                .authorAvatarUrl(author != null ? author.getAvatarUrl() : null)
                 .status(question.getStatus())
                 .createdAt(question.getCreatedAt())
                 .updatedAt(question.getUpdatedAt())
                 .build();
+    }
+
+    private ObjectiveQuestionVO toVO(ObjectiveQuestion question, boolean privileged) {
+        User author = null;
+        if (question.getCreatedBy() != null) {
+            try {
+                author = userMapper.findById(question.getCreatedBy());
+            } catch (Exception ignored) {
+            }
+        }
+        return toVO(question, privileged, author);
     }
 
     private String toOptionsJson(List<String> options) {

@@ -20,6 +20,9 @@ export interface Exam {
   endTime: string | null;
   mode: 'ACM' | 'OI';
   status: number;
+  requireStudentInfo?: number | boolean;
+  schoolName?: string | null;
+  semester?: string | null;
   sessionStatus: string | null;
   submitted?: boolean;
   createdBy: number;
@@ -35,12 +38,35 @@ export interface ExamWriteRequest {
   durationMinutes: number;
   mode: 'ACM' | 'OI';
   status?: number;
+  requireStudentInfo?: number;
+  schoolName?: string | null;
+  semester?: string | null;
   startTime?: string | null;
   questions: Array<{
     questionId: number;
     questionType: 'ALGO' | 'DB' | 'OBJECTIVE';
     score: number;
   }>;
+}
+
+export interface UserSavedAnswer {
+  examQuestionId: number;
+  answerContent?: string | null;
+  language?: string | null;
+  status?: string | null;
+  score?: number | null;
+  submissionId?: number | null;
+}
+
+export interface ExamStudentInfo {
+  id?: number;
+  examId?: number;
+  userId?: number;
+  realName: string;
+  studentNo: string;
+  college?: string;
+  major?: string;
+  className?: string;
 }
 
 export interface SessionEnter {
@@ -53,8 +79,13 @@ export interface SessionEnter {
   endTime: string;
   status: string;
   remainingSeconds: number;
+  requireStudentInfo?: boolean;
+  hasFilledStudentInfo?: boolean;
+  studentInfo?: ExamStudentInfo | null;
   questions: ExamSessionQuestion[];
+  myAnswers?: Record<number, UserSavedAnswer>;
 }
+
 
 /** 考试中单题：快照 + 实时题面（作答所需）。 */
 export interface ExamSessionQuestion {
@@ -66,7 +97,7 @@ export interface ExamSessionQuestion {
   sortOrder: number;
   content: string | null;
   options: string[] | null;
-  objectiveType: 'SINGLE' | 'MULTIPLE' | 'FILL' | null;
+  objectiveType: 'SINGLE' | 'MULTIPLE' | 'JUDGE' | 'FILL' | null;
   schemaSql: string | null;
   timeLimitMs: number | null;
   memoryLimitMb: number | null;
@@ -120,6 +151,66 @@ export interface RankRow {
   fullScore: number;
 }
 
+export interface ExamStudentRow {
+  userId: number;
+  username: string;
+  realName: string;
+  studentNo: string;
+  college: string;
+  major: string;
+  className: string;
+  totalScore: number;
+  fullScore: number;
+  solvedCount: number;
+  totalQuestions: number;
+  submitted: boolean;
+  submittedAt?: string | null;
+  penaltyMinutes?: number | null;
+  questionScores?: Record<number, number>;
+  questionStatuses?: Record<number, string>;
+}
+
+export interface ExamAdminOverview {
+  exam: Exam;
+  totalStudents: number;
+  submittedCount: number;
+  avgScore: number;
+  maxScore: number;
+  minScore: number;
+  students: ExamStudentRow[];
+}
+
+export interface ExamStudentPaperQuestion {
+  examQuestionId: number;
+  questionId: number;
+  questionType: 'ALGO' | 'DB' | 'OBJECTIVE';
+  objectiveType?: 'SINGLE' | 'MULTIPLE' | 'JUDGE' | 'FILL' | null;
+  title: string;
+  content: string;
+  options?: string[];
+  fullScore: number;
+  studentScore?: number | null;
+  status: string;
+  studentAnswer?: string | null;
+  standardAnswer?: string | null;
+  isCorrect?: boolean | null;
+  language?: string | null;
+  resultJson?: string | null;
+}
+
+export interface ExamStudentPaper {
+  exam: Exam;
+  studentInfo?: ExamStudentInfo | null;
+  userId?: number | null;
+  username?: string | null;
+  totalScore?: number | null;
+  fullScore: number;
+  solvedCount?: number | null;
+  submitted?: boolean;
+  submittedAt?: string | null;
+  questions: ExamStudentPaperQuestion[];
+}
+
 export const examApi = {
   listExams: (params: { keyword?: string; page?: number; size?: number }) =>
     http.get<PageResult<Exam>>('/exams', { params }),
@@ -151,4 +242,37 @@ export const examApi = {
   mySwitchCount: (examId: number) =>
     http.get<{ count: number }>(`/exams/${examId}/switch`),
   cancel: (examId: number) => http.delete<void>(`/exams/${examId}/cancel`),
+  // 考生实名登记
+  saveStudentInfo: (examId: number, body: ExamStudentInfo) =>
+    http.post<ExamStudentInfo>(`/exams/${examId}/student-info`, body),
+  getStudentInfo: (examId: number) =>
+    http.get<ExamStudentInfo | null>(`/exams/${examId}/student-info`),
+  // 教师查卷与全场成绩总览
+  getAdminOverview: (examId: number) =>
+    http.get<ExamAdminOverview>(`/exams/${examId}/admin-overview`),
+  getStudentPaper: (examId: number, userId: number) =>
+    http.get<ExamStudentPaper>(`/exams/${examId}/students/${userId}/paper`),
+  getPaperTemplate: (examId: number) =>
+    http.get<ExamStudentPaper>(`/exams/${examId}/paper-template`),
+  getExportUrl: (examId: number, format: 'word' | 'pdf', studentId?: number) => {
+    let url = `/api/v1/exams/${examId}/export?format=${format}`;
+    if (studentId != null) url += `&studentId=${studentId}`;
+    const token = localStorage.getItem('token');
+    if (token) {
+      url += `&token=${encodeURIComponent(token)}`;
+    }
+    return url;
+  },
+  downloadWord: (examId: number, studentId?: number) => {
+    const url = examApi.getExportUrl(examId, 'word', studentId);
+    const link = document.createElement('a');
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  },
+  openPrintPdf: (examId: number, studentId?: number) => {
+    const url = examApi.getExportUrl(examId, 'pdf', studentId);
+    window.open(url, '_blank');
+  },
 };

@@ -18,9 +18,11 @@ import com.kece.exam.dto.ExamSessionQuestionVO;
 import com.kece.exam.dto.ExamSessionVO;
 import com.kece.exam.dto.ExamVO;
 import com.kece.exam.dto.SessionEnterVO;
+import com.kece.exam.dto.UserSavedAnswerVO;
 import com.kece.exam.entity.Exam;
 import com.kece.exam.entity.ExamQuestion;
 import com.kece.exam.entity.ExamSessionStatus;
+import com.kece.exam.entity.ExamSubmission;
 import com.kece.exam.mapper.ExamMapper;
 import com.kece.exam.mapper.ExamQuestionMapper;
 import com.kece.exam.mapper.ExamSubmissionMapper;
@@ -28,12 +30,21 @@ import com.kece.objective.entity.ObjectiveQuestion;
 import com.kece.objective.mapper.ObjectiveQuestionMapper;
 import com.kece.question.entity.Question;
 import com.kece.question.mapper.QuestionMapper;
+import com.kece.question.strategy.QuestionMeta;
+import com.kece.question.strategy.QuestionStrategyFactory;
+import com.kece.question.strategy.QuestionTypeStrategy;
 import com.kece.submission.mapper.SubmissionMapper;
+import com.kece.exam.dto.ExamStudentInfoRequest;
+import com.kece.exam.dto.ExamStudentInfoVO;
+import com.kece.exam.entity.ExamStudentInfo;
+import com.kece.exam.mapper.ExamStudentInfoMapper;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -55,7 +66,9 @@ public class ExamService {
     private final QuestionMapper questionMapper;
     private final DbQuestionMapper dbQuestionMapper;
     private final ObjectiveQuestionMapper objectiveQuestionMapper;
+    private final ExamStudentInfoMapper studentInfoMapper;
     private final ObjectMapper objectMapper;
+    private final QuestionStrategyFactory strategyFactory;
 
     /** 公开列表：仅公开考试；all=true 时特权角色可见私有考试。 */
     public PageResult<ExamVO> list(
@@ -213,6 +226,54 @@ public class ExamService {
                 examQuestionMapper.findByExamId(exam.getId()).stream()
                         .map(this::buildSessionQuestion)
                         .toList();
+
+        Map<Long, UserSavedAnswerVO> myAnswers = new HashMap<>();
+        if (currentUser != null) {
+            List<ExamSubmission> savedList = submissionMapper.findByExamAndUser(id, currentUser.getId());
+            Map<Long, ExamQuestion> eqMap = examQuestionMapper.findByExamId(exam.getId()).stream()
+                    .collect(java.util.stream.Collectors.toMap(ExamQuestion::getId, q -> q));
+            for (ExamSubmission s : savedList) {
+                ExamQuestion eq = eqMap.get(s.getExamQuestionId());
+                Long subId = null;
+                String liveStatus = s.getStatus();
+                Integer liveScore = s.getScore();
+                if (eq != null && strategyFactory != null) {
+                    var latest = strategyFactory.findStrategy(eq.getQuestionType())
+                            .flatMap(st -> st.findLatestContestSubmission(exam.getId(), currentUser.getId(), eq.getQuestionId()));
+                    if (latest.isPresent()) {
+                        subId = latest.get().submissionId();
+                        liveStatus = latest.get().status();
+                        int fullScore = eq.getScore() != null ? eq.getScore() : 10;
+                        liveScore = scaleScore(latest.get().score(), fullScore, liveStatus);
+                    } else if (liveScore != null && !"OBJECTIVE".equals(eq.getQuestionType())) {
+                        int fullScore = eq.getScore() != null ? eq.getScore() : 10;
+                        liveScore = scaleScore(liveScore, fullScore, liveStatus);
+                    }
+                }
+                myAnswers.put(
+                        s.getExamQuestionId(),
+                        UserSavedAnswerVO.builder()
+                                .examQuestionId(s.getExamQuestionId())
+                                .answerContent(s.getAnswerContent())
+                                .language(s.getLanguage())
+                                .status(liveStatus)
+                                .score(liveScore)
+                                .submissionId(subId)
+                                .build());
+            }
+        }
+
+        boolean requireInfo = exam.getRequireStudentInfo() != null && exam.getRequireStudentInfo() == 1;
+        boolean hasFilled = false;
+        ExamStudentInfoVO studentInfoVO = null;
+        if (currentUser != null) {
+            ExamStudentInfo si = studentInfoMapper.findByExamAndUser(id, currentUser.getId());
+            if (si != null) {
+                hasFilled = true;
+                studentInfoVO = toStudentInfoVO(si);
+            }
+        }
+
         return SessionEnterVO.builder()
                 .id(exam.getId())
                 .examId(exam.getId())
@@ -223,8 +284,69 @@ public class ExamService {
                 .endTime(exam.getEndTime())
                 .status(exam.getSessionStatus())
                 .remainingSeconds(Math.max(remainingSeconds, 0))
+                .requireStudentInfo(requireInfo)
+                .hasFilledStudentInfo(hasFilled)
+                .studentInfo(studentInfoVO)
                 .questions(questions)
+                .myAnswers(myAnswers)
                 .build();
+    }
+
+    /** 考生登记/更新在本次考试中的实名信息。 */
+    @Transactional
+    public ExamStudentInfoVO saveStudentInfo(Long examId, ExamStudentInfoRequest req) {
+        AuthUser user = requireUser();
+        Exam exam = getExamOrThrow(examId);
+        ExamStudentInfo existing = studentInfoMapper.findByExamAndUser(examId, user.getId());
+        if (existing == null) {
+            ExamStudentInfo info = ExamStudentInfo.builder()
+                    .examId(examId)
+                    .userId(user.getId())
+                    .realName(req.getRealName().trim())
+                    .studentNo(req.getStudentNo().trim())
+                    .college(req.getCollege() == null ? "" : req.getCollege().trim())
+                    .major(req.getMajor() == null ? "" : req.getMajor().trim())
+                    .className(req.getClassName() == null ? "" : req.getClassName().trim())
+                    .build();
+            studentInfoMapper.insert(info);
+            return toStudentInfoVO(info);
+        } else {
+            existing.setRealName(req.getRealName().trim());
+            existing.setStudentNo(req.getStudentNo().trim());
+            existing.setCollege(req.getCollege() == null ? "" : req.getCollege().trim());
+            existing.setMajor(req.getMajor() == null ? "" : req.getMajor().trim());
+            existing.setClassName(req.getClassName() == null ? "" : req.getClassName().trim());
+            studentInfoMapper.update(existing);
+            return toStudentInfoVO(existing);
+        }
+    }
+
+    /** 查询当前考生在某场考试中已登记的实名信息。 */
+    public ExamStudentInfoVO getStudentInfo(Long examId) {
+        AuthUser user = requireUser();
+        ExamStudentInfo existing = studentInfoMapper.findByExamAndUser(examId, user.getId());
+        return existing != null ? toStudentInfoVO(existing) : null;
+    }
+
+    private ExamStudentInfoVO toStudentInfoVO(ExamStudentInfo si) {
+        return ExamStudentInfoVO.builder()
+                .id(si.getId())
+                .examId(si.getExamId())
+                .userId(si.getUserId())
+                .realName(si.getRealName())
+                .studentNo(si.getStudentNo())
+                .college(si.getCollege())
+                .major(si.getMajor())
+                .className(si.getClassName())
+                .build();
+    }
+
+    private AuthUser requireUser() {
+        AuthUser user = AuthContextHolder.get();
+        if (user == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        return user;
     }
 
     /** 公开可进入考试列表（公开且未结束/未取消）。 */
@@ -286,6 +408,13 @@ public class ExamService {
         exam.setDurationMinutes(request.getDurationMinutes());
         exam.setMode(request.getMode().trim().toUpperCase());
         exam.setStatus(request.getStatus() == null ? 1 : request.getStatus());
+        exam.setRequireStudentInfo(request.getRequireStudentInfo() == null ? 0 : request.getRequireStudentInfo());
+        if (request.getSchoolName() != null && !request.getSchoolName().isBlank()) {
+            exam.setSchoolName(request.getSchoolName());
+        }
+        if (request.getSemester() != null && !request.getSemester().isBlank()) {
+            exam.setSemester(request.getSemester());
+        }
     }
 
     /** 组卷快照：按请求顺序写入快照条目，题目可见性校验在服务端强制。 */
@@ -298,62 +427,29 @@ public class ExamService {
     }
 
     private ExamQuestion buildSnapshot(Long examId, int sortOrder, ExamQuestionRequest req) {
-        String type = req.getQuestionType().trim().toUpperCase();
-        String title;
-        switch (type) {
-            case "ALGO" -> {
-                Question q = questionMapper.findById(req.getQuestionId());
-                title =
-                        visibleTitle(
-                                q == null ? null : q.getTitle(),
-                                q == null ? null : q.getStatus(),
-                                q == null ? null : q.getCreatedBy());
-            }
-            case "DB" -> {
-                DbQuestion q = dbQuestionMapper.findById(req.getQuestionId());
-                title =
-                        visibleTitle(
-                                q == null ? null : q.getTitle(),
-                                q == null ? null : q.getStatus(),
-                                q == null ? null : q.getCreatedBy());
-            }
-            case "OBJECTIVE" -> {
-                ObjectiveQuestion q = objectiveQuestionMapper.findById(req.getQuestionId());
-                title =
-                        visibleTitle(
-                                q == null ? null : q.getContent(),
-                                q == null ? null : q.getStatus(),
-                                q == null ? null : q.getCreatedBy());
-            }
-            default ->
-                    throw new BusinessException(ResultCode.PARAM_ERROR, "题型不合法（ALGO/DB/OBJECTIVE）");
-        }
-        if (title == null) {
-            throw new BusinessException(
-                    ResultCode.PARAM_ERROR, "题目不存在或不可组卷: " + type + "#" + req.getQuestionId());
-        }
+        QuestionTypeStrategy strategy = strategyFactory.getStrategy(req.getQuestionType());
+        QuestionMeta meta = strategy.resolveQuestionMeta(req.getQuestionId());
+        checkQuestionPermission(meta.getCreatedBy(), strategy.getTypeCode() + "#" + req.getQuestionId());
+
         ExamQuestion snapshot = new ExamQuestion();
         snapshot.setExamId(examId);
         snapshot.setQuestionId(req.getQuestionId());
-        snapshot.setQuestionType(type);
-        snapshot.setTitle(truncate(title, TITLE_MAX_LENGTH));
+        snapshot.setQuestionType(strategy.getTypeCode());
+        snapshot.setTitle(truncate(meta.getTitle(), TITLE_MAX_LENGTH));
         snapshot.setScore(req.getScore());
         snapshot.setSortOrder(sortOrder);
         return snapshot;
     }
 
-    private String visibleTitle(String title, Integer questionStatus, Long createdBy) {
-        if (title == null || questionStatus == null) {
-            return null;
-        }
-        if (questionStatus == 1) {
-            return title;
-        }
+    private void checkQuestionPermission(Long createdBy, String questionDesc) {
         AuthUser user = AuthContextHolder.get();
-        if (user != null && (user.hasRole(Role.ADMIN) || createdBy.equals(user.getId()))) {
-            return title;
+        if (user != null && user.hasRole(Role.ADMIN)) {
+            return;
         }
-        return null;
+        if (user == null || createdBy == null || !createdBy.equals(user.getId())) {
+            throw new BusinessException(
+                    ResultCode.PARAM_ERROR, "教师只能选择自己出的题目: " + questionDesc);
+        }
     }
 
     private ExamSessionQuestionVO buildSessionQuestion(ExamQuestion q) {
@@ -365,31 +461,8 @@ public class ExamService {
                         .title(q.getTitle())
                         .score(q.getScore())
                         .sortOrder(q.getSortOrder());
-        switch (q.getQuestionType()) {
-            case "ALGO" -> {
-                Question question = questionMapper.findById(q.getQuestionId());
-                if (question != null) {
-                    b.content(question.getDescription())
-                            .timeLimitMs(question.getTimeLimit())
-                            .memoryLimitMb(question.getMemoryLimit());
-                }
-            }
-            case "DB" -> {
-                DbQuestion question = dbQuestionMapper.findById(q.getQuestionId());
-                if (question != null) {
-                    b.content(question.getDescription()).schemaSql(question.getSchemaSql());
-                }
-            }
-            case "OBJECTIVE" -> {
-                ObjectiveQuestion question = objectiveQuestionMapper.findById(q.getQuestionId());
-                if (question != null) {
-                    b.content(question.getContent())
-                            .objectiveType(question.getType())
-                            .options(parseOptions(question.getOptions()));
-                }
-            }
-            default -> {}
-        }
+        strategyFactory.findStrategy(q.getQuestionType())
+                .ifPresent(s -> s.populateExamSessionQuestion(q.getQuestionId(), b));
         return b.build();
     }
 
@@ -485,6 +558,9 @@ public class ExamService {
                 .endTime(exam.getEndTime())
                 .mode(exam.getMode())
                 .status(exam.getStatus())
+                .requireStudentInfo(exam.getRequireStudentInfo())
+                .schoolName(exam.getSchoolName())
+                .semester(exam.getSemester())
                 .sessionStatus(exam.getSessionStatus())
                 .submitted(submitted)
                 .createdBy(exam.getCreatedBy())
@@ -525,5 +601,19 @@ public class ExamService {
             return null;
         }
         return value.length() <= max ? value : value.substring(0, max);
+    }
+
+    private Integer scaleScore(Integer judgeScore, int fullScore, String status) {
+        if ("ACCEPTED".equals(status)) {
+            return fullScore;
+        }
+        if (judgeScore == null || judgeScore <= 0 || fullScore <= 0) {
+            return 0;
+        }
+        int earned = (int) Math.round((double) judgeScore * fullScore / 100.0);
+        if (earned == 0 && fullScore > 0 && judgeScore > 0) {
+            earned = 1;
+        }
+        return Math.min(earned, fullScore);
     }
 }

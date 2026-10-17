@@ -1,13 +1,17 @@
 package com.kece.practice.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kece.common.exception.BusinessException;
 import com.kece.common.response.ResultCode;
+import com.kece.common.security.AuthContextHolder;
 import com.kece.common.security.AuthUser;
 import com.kece.common.security.Role;
+import com.kece.database.dto.DbSubmissionListVO;
 import com.kece.database.entity.DbQuestion;
 import com.kece.database.mapper.DbQuestionMapper;
+import com.kece.database.mapper.DbSubmissionMapper;
 import com.kece.objective.dto.AnswerResultVO;
 import com.kece.objective.entity.ObjectiveQuestion;
 import com.kece.objective.mapper.ObjectiveQuestionMapper;
@@ -17,6 +21,12 @@ import com.kece.practice.entity.*;
 import com.kece.practice.mapper.*;
 import com.kece.question.entity.Question;
 import com.kece.question.mapper.QuestionMapper;
+import com.kece.submission.dto.SubmissionListVO;
+import com.kece.question.strategy.JudgeResultDTO;
+import com.kece.question.strategy.QuestionMeta;
+import com.kece.question.strategy.QuestionStrategyFactory;
+import com.kece.question.strategy.QuestionTypeStrategy;
+import com.kece.submission.mapper.SubmissionMapper;
 import com.kece.user.entity.User;
 import com.kece.user.mapper.UserMapper;
 import java.security.SecureRandom;
@@ -26,6 +36,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,9 +55,13 @@ public class LessonPracticeService {
     private final ObjectiveQuestionMapper objectiveQuestionMapper;
     private final QuestionMapper algoQuestionMapper;
     private final DbQuestionMapper dbQuestionMapper;
+    private final SubmissionMapper algoSubmissionMapper;
+    private final DbSubmissionMapper dbSubmissionMapper;
     private final UserMapper userMapper;
     private final ObjectiveGrader objectiveGrader;
     private final ObjectMapper objectMapper;
+    private final StringRedisTemplate redis;
+    private final QuestionStrategyFactory strategyFactory;
 
     /** 生成唯一 6 位大写房间口令。 */
     private String generateAccessCode() {
@@ -88,37 +103,28 @@ public class LessonPracticeService {
         practiceMapper.insert(practice);
 
         if (req.getQuestions() != null && !req.getQuestions().isEmpty()) {
+            AuthUser user = AuthContextHolder.get();
+            boolean isAdmin = user != null && user.hasRole(Role.ADMIN);
             List<LessonPracticeQuestion> qList = new ArrayList<>();
             int sort = 1;
             for (PracticeQuestionItem item : req.getQuestions()) {
+                String type = item.getQuestionType() != null ? item.getQuestionType().toUpperCase() : "";
                 String title = item.getTitle();
+                QuestionTypeStrategy strategy = strategyFactory.getStrategy(type);
+                QuestionMeta meta = strategy.resolveQuestionMeta(item.getQuestionId());
+                if (!isAdmin && (meta.getCreatedBy() == null || !meta.getCreatedBy().equals(teacherId))) {
+                    throw new BusinessException(
+                            ResultCode.PARAM_ERROR, "教师只能选择自己出的" + strategy.getDisplayName() + "（" + meta.getTitle() + "）");
+                }
                 if (title == null || title.isBlank()) {
-                    // 自动按题型拉取标题
-                    if ("OBJECTIVE".equalsIgnoreCase(item.getQuestionType())) {
-                        ObjectiveQuestion oq =
-                                objectiveQuestionMapper.findById(item.getQuestionId());
-                        title =
-                                oq != null
-                                        ? (oq.getContent().length() > 30
-                                                ? oq.getContent().substring(0, 30) + "…"
-                                                : oq.getContent())
-                                        : "客观题";
-                    } else if ("ALGO".equalsIgnoreCase(item.getQuestionType())) {
-                        Question q = algoQuestionMapper.findById(item.getQuestionId());
-                        title = q != null ? q.getTitle() : "算法题";
-                    } else if ("DB".equalsIgnoreCase(item.getQuestionType())) {
-                        DbQuestion dq = dbQuestionMapper.findById(item.getQuestionId());
-                        title = dq != null ? dq.getTitle() : "数据库题";
-                    } else {
-                        title = "题目 " + sort;
-                    }
+                    title = meta.getTitle();
                 }
 
                 qList.add(
                         LessonPracticeQuestion.builder()
                                 .practiceId(practice.getId())
                                 .questionId(item.getQuestionId())
-                                .questionType(item.getQuestionType().toUpperCase())
+                                .questionType(type)
                                 .title(title)
                                 .score(item.getScore() != null ? item.getScore() : 10)
                                 .sortOrder(
@@ -207,6 +213,12 @@ public class LessonPracticeService {
         }
         List<LessonPracticeQuestion> allQuestions =
                 questionMapper.listByPracticeId(practice.getId());
+
+        if (myMember != null) {
+            syncAndRecalculateMember(practice, userId, allQuestions);
+            myMember = memberMapper.findByPracticeAndUser(practice.getId(), userId);
+        }
+
         List<LessonPracticeSubmission> mySubmissions =
                 userId != null
                         ? submissionMapper.listByPracticeAndUser(practice.getId(), userId)
@@ -219,7 +231,11 @@ public class LessonPracticeService {
                                 Collectors.toMap(
                                         LessonPracticeSubmission::getPracticeQuestionId,
                                         s -> s,
-                                        (existing, replacement) -> existing));
+                                        (existing, replacement) -> {
+                                            int eScore = existing.getScore() != null ? existing.getScore() : 0;
+                                            int rScore = replacement.getScore() != null ? replacement.getScore() : 0;
+                                            return eScore >= rScore ? existing : replacement;
+                                        }));
 
         List<PracticeObjectiveQuestionVO> objectiveList = new ArrayList<>();
         List<PracticePracticalQuestionVO> practicalList = new ArrayList<>();
@@ -245,58 +261,19 @@ public class LessonPracticeService {
                                 .isCorrect(sub != null ? isCorrect : null)
                                 .answered(sub != null)
                                 .build());
-            } else if ("ALGO".equals(pq.getQuestionType())) {
-                Question aq = algoQuestionMapper.findById(pq.getQuestionId());
-                List<String> langs =
-                        aq != null && aq.getLanguages() != null
-                                ? Arrays.stream(aq.getLanguages().split(","))
-                                        .map(String::trim)
-                                        .toList()
-                                : List.of("cpp", "java", "python");
-
-                practicalList.add(
-                        PracticePracticalQuestionVO.builder()
-                                .practiceQuestionId(pq.getId())
-                                .questionId(pq.getQuestionId())
-                                .questionType("ALGO")
-                                .title(aq != null ? aq.getTitle() : pq.getTitle())
-                                .score(pq.getScore())
-                                .sortOrder(pq.getSortOrder())
-                                .difficulty(aq != null ? aq.getDifficulty() : "MEDIUM")
-                                .timeLimitMs(
-                                        aq != null && aq.getTimeLimit() != null
-                                                ? aq.getTimeLimit()
-                                                : 1000)
-                                .memoryLimitKb(
-                                        aq != null && aq.getMemoryLimit() != null
-                                                ? aq.getMemoryLimit() * 1024
-                                                : 262144)
-                                .languages(langs)
-                                .userStatus(sub != null ? sub.getStatus() : "UNATTEMPTED")
-                                .userScore(
-                                        sub != null && sub.getScore() != null ? sub.getScore() : 0)
-                                .submissionId(sub != null ? sub.getSubmissionId() : null)
-                                .build());
-            } else if ("DB".equals(pq.getQuestionType())) {
-                DbQuestion dq = dbQuestionMapper.findById(pq.getQuestionId());
-
-                practicalList.add(
-                        PracticePracticalQuestionVO.builder()
-                                .practiceQuestionId(pq.getId())
-                                .questionId(pq.getQuestionId())
-                                .questionType("DB")
-                                .title(dq != null ? dq.getTitle() : pq.getTitle())
-                                .score(pq.getScore())
-                                .sortOrder(pq.getSortOrder())
-                                .difficulty(dq != null ? dq.getType() : "SELECT")
-                                .timeLimitMs(3000)
-                                .memoryLimitKb(262144)
-                                .languages(List.of("sql"))
-                                .userStatus(sub != null ? sub.getStatus() : "UNATTEMPTED")
-                                .userScore(
-                                        sub != null && sub.getScore() != null ? sub.getScore() : 0)
-                                .submissionId(sub != null ? sub.getSubmissionId() : null)
-                                .build());
+            } else {
+                QuestionTypeStrategy strategy = strategyFactory.getStrategy(pq.getQuestionType());
+                if (strategy.isPractical()) {
+                    strategy.buildPracticePracticalVO(
+                            pq.getQuestionId(),
+                            pq.getId(),
+                            pq.getScore(),
+                            pq.getSortOrder(),
+                            sub != null ? sub.getStatus() : "UNATTEMPTED",
+                            sub != null && sub.getScore() != null ? sub.getScore() : 0,
+                            sub != null ? sub.getSubmissionId() : null
+                    ).ifPresent(practicalList::add);
+                }
             }
         }
 
@@ -392,12 +369,17 @@ public class LessonPracticeService {
                                             / (gradeResult.getFullScore() > 0
                                                     ? gradeResult.getFullScore()
                                                     : 1));
+            if (gradeResult.getScore() > 0 && questionScore == 0 && pq.getScore() > 0) {
+                questionScore = 1; // 漏选或部分对保底 1 分，绝不吞分
+            }
             totalEarned += questionScore;
             if (gradeResult.isCorrect()) {
                 correctCount++;
             }
 
-            String status = gradeResult.isCorrect() ? "ACCEPTED" : "WRONG_ANSWER";
+            String status = gradeResult.isCorrect()
+                    ? "ACCEPTED"
+                    : (questionScore > 0 ? "PARTIAL" : "WRONG_ANSWER");
 
             // 保存或更新提交
             LessonPracticeSubmission existSub =
@@ -464,13 +446,37 @@ public class LessonPracticeService {
         LessonPracticeMember member = memberMapper.findByPracticeAndUser(practice.getId(), userId);
         if (member != null && member.getSubmitted() == 1) return;
 
+        LessonPracticeQuestion pq = questionMapper.findById(practiceQuestionId);
+        if (pq == null || !practice.getId().equals(pq.getPracticeId())) {
+            return;
+        }
+        int fullScore = pq.getScore() != null ? pq.getScore() : 10;
+
+        // 根据判题记录校验真实得分与测试用例部分分，必须严格校验归属防止伪造
+        JudgeInfo info = null;
+        if (submissionId != null) {
+            info = verifyAndExtractJudgeInfo(questionType, submissionId, userId, pq.getQuestionId());
+        }
+
+        int judgeRawScore = info != null && info.score() != null ? info.score() : 0;
+        String judgeStatus = info != null && info.status() != null ? info.status() : (status != null && "PENDING".equalsIgnoreCase(status) ? "PENDING" : "UNATTEMPTED");
+
+        int calculatedScore = calculateEarnedScore(judgeRawScore, fullScore, judgeStatus);
+        String finalStatus = resolvePracticeStatus(judgeStatus, calculatedScore, fullScore);
+
         LessonPracticeSubmission exist =
                 submissionMapper.findByPracticeUserQuestion(
                         practice.getId(), userId, practiceQuestionId);
         if (exist != null) {
-            exist.setSubmissionId(submissionId);
-            exist.setStatus(status);
-            exist.setScore(score);
+            // 保留历史最高得分与最优状态，避免后续错误提交覆盖已有得分
+            int currentScore = exist.getScore() != null ? exist.getScore() : 0;
+            int bestScore = Math.max(currentScore, calculatedScore);
+            String bestStatus = "ACCEPTED".equals(exist.getStatus()) || "ACCEPTED".equals(finalStatus)
+                    ? "ACCEPTED"
+                    : (bestScore > 0 ? "PARTIAL" : finalStatus);
+            exist.setSubmissionId(submissionId != null ? submissionId : exist.getSubmissionId());
+            exist.setStatus(bestStatus);
+            exist.setScore(bestScore);
             submissionMapper.updateSubmission(exist);
         } else {
             LessonPracticeSubmission sub =
@@ -480,8 +486,8 @@ public class LessonPracticeService {
                             .userId(userId)
                             .questionType(questionType)
                             .submissionId(submissionId)
-                            .status(status)
-                            .score(score)
+                            .status(finalStatus)
+                            .score(calculatedScore)
                             .createdAt(LocalDateTime.now())
                             .build();
             submissionMapper.insert(sub);
@@ -490,14 +496,47 @@ public class LessonPracticeService {
         recalculateMemberScore(practice.getId(), userId);
     }
 
-    /** 重新计算成员总分与通过题目数（只统计实战编程/SQL题目通过数）。 */
+    /** 重新计算成员总分与通过题目数（按题目去重取最高得分，确保部分分百分百计入）。 */
     private void recalculateMemberScore(Long practiceId, Long userId) {
         List<LessonPracticeSubmission> subs =
                 submissionMapper.listByPracticeAndUser(practiceId, userId);
-        int totalScore = subs.stream().mapToInt(LessonPracticeSubmission::getScore).sum();
+
+        // 1. 自动校正并补全历史未计入的部分分
+        for (LessonPracticeSubmission s : subs) {
+            if (!"OBJECTIVE".equals(s.getQuestionType()) && s.getSubmissionId() != null) {
+                LessonPracticeQuestion pq = questionMapper.findById(s.getPracticeQuestionId());
+                int fullScore = pq != null && pq.getScore() != null ? pq.getScore() : 10;
+                JudgeInfo info = extractJudgeInfo(s.getQuestionType(), s.getSubmissionId());
+                if (info != null && !isJudging(info.status())) {
+                    int earned = calculateEarnedScore(info.score(), fullScore, info.status());
+                    String status = resolvePracticeStatus(info.status(), earned, fullScore);
+                    int currentScore = s.getScore() != null ? s.getScore() : 0;
+                    if (earned > currentScore || (!"ACCEPTED".equals(s.getStatus()) && "ACCEPTED".equals(status))) {
+                        s.setScore(Math.max(currentScore, earned));
+                        s.setStatus("ACCEPTED".equals(s.getStatus()) ? "ACCEPTED" : status);
+                        submissionMapper.updateSubmission(s);
+                    }
+                }
+            }
+        }
+
+        // 2. 按题目聚合并取最优得分与状态（防止多条提交记录重复计算或部分分被低分覆盖）
+        Map<Long, LessonPracticeSubmission> bestMap = new HashMap<>();
+        for (LessonPracticeSubmission s : subs) {
+            if (s.getPracticeQuestionId() == null) continue;
+            bestMap.merge(s.getPracticeQuestionId(), s, (existing, current) -> {
+                int eScore = existing.getScore() != null ? existing.getScore() : 0;
+                int cScore = current.getScore() != null ? current.getScore() : 0;
+                if (cScore > eScore) return current;
+                if (cScore == eScore && "ACCEPTED".equals(current.getStatus())) return current;
+                return existing;
+            });
+        }
+
+        int totalScore = bestMap.values().stream().mapToInt(s -> s.getScore() != null ? s.getScore() : 0).sum();
         int solvedCount =
                 (int)
-                        subs.stream()
+                        bestMap.values().stream()
                                 .filter(
                                         s ->
                                                 !"OBJECTIVE".equals(s.getQuestionType())
@@ -505,6 +544,135 @@ public class LessonPracticeService {
                                 .count();
 
         memberMapper.updateScoreAndSolved(practiceId, userId, totalScore, solvedCount);
+    }
+
+    private record JudgeInfo(String status, Integer score) {}
+
+    /** 校验提交记录是否真实归属于当前用户以及对应的题目，防止伪造其他学生的 submissionId。 */
+    private JudgeInfo verifyAndExtractJudgeInfo(
+            String questionType, Long submissionId, Long expectedUserId, Long expectedQuestionId) {
+        return strategyFactory.findStrategy(questionType)
+                .map(s -> s.verifyAndExtractJudgeInfo(submissionId, expectedUserId, expectedQuestionId))
+                .map(r -> new JudgeInfo(r.status(), r.score()))
+                .orElse(null);
+    }
+
+    /** 提取评测结果：优先 Redis 实时状态缓存，缺失时回退 MySQL 及 resultJson 解析。 */
+    private JudgeInfo extractJudgeInfo(String questionType, Long submissionId) {
+        if (submissionId == null) return null;
+        return strategyFactory.findStrategy(questionType)
+                .map(s -> s.extractJudgeInfo(submissionId))
+                .map(r -> new JudgeInfo(r.status(), r.score()))
+                .orElse(null);
+    }
+
+    private int calculateEarnedScore(Integer rawJudgeScore, int fullScore, String status) {
+        if ("ACCEPTED".equals(status)) {
+            return fullScore;
+        }
+        if (rawJudgeScore == null || rawJudgeScore <= 0) {
+            return 0;
+        }
+        int earned = (int) Math.round((double) rawJudgeScore * fullScore / 100.0);
+        if (earned == 0 && fullScore > 0) {
+            earned = 1; // 只要测试点有得分，至少得 1 分，绝不吞分
+        }
+        return Math.min(earned, fullScore);
+    }
+
+    private String resolvePracticeStatus(String judgeStatus, int earnedScore, int fullScore) {
+        if (earnedScore >= fullScore || "ACCEPTED".equals(judgeStatus)) {
+            return "ACCEPTED";
+        }
+        if (earnedScore > 0) {
+            return "PARTIAL";
+        }
+        return judgeStatus != null && !judgeStatus.isBlank() ? judgeStatus : "WRONG_ANSWER";
+    }
+
+    private boolean isJudging(String status) {
+        return "PENDING".equals(status) || "COMPILING".equals(status) || "JUDGING".equals(status);
+    }
+
+    /** 查找用户在指定题目上的最新提交（防客户端轮询中断导致未计分）。 */
+    private Long findLatestUserSubmission(Long userId, LessonPracticeQuestion pq) {
+        if (userId == null || pq == null || pq.getQuestionId() == null) return null;
+        return strategyFactory.findStrategy(pq.getQuestionType())
+                .map(s -> s.findLatestUserSubmissionId(userId, pq.getQuestionId()))
+                .orElse(null);
+    }
+
+    /** 随堂课练成员作答自愈对齐与重新统计。 */
+    private void syncAndRecalculateMember(
+            LessonPractice practice, Long userId, List<LessonPracticeQuestion> questions) {
+        if (userId == null || practice == null) return;
+        List<LessonPracticeSubmission> subs =
+                submissionMapper.listByPracticeAndUser(practice.getId(), userId);
+        Map<Long, LessonPracticeSubmission> subByPqId =
+                subs.stream()
+                        .filter(s -> s.getPracticeQuestionId() != null)
+                        .collect(
+                                Collectors.toMap(
+                                        LessonPracticeSubmission::getPracticeQuestionId,
+                                        s -> s,
+                                        (a, b) -> a.getId() >= b.getId() ? a : b));
+
+        for (LessonPracticeQuestion pq : questions) {
+            if ("OBJECTIVE".equals(pq.getQuestionType())) continue;
+            int fullScore = pq.getScore() != null ? pq.getScore() : 10;
+            LessonPracticeSubmission exist = subByPqId.get(pq.getId());
+
+            Long subId = exist != null ? exist.getSubmissionId() : null;
+
+            // 若没有关联提交或当前分数为 0 且未 AC，尝试自动找回用户在该题上的最新提交
+            if (subId == null || ((exist.getScore() == null || exist.getScore() == 0) && !"ACCEPTED".equals(exist.getStatus()))) {
+                Long foundSubId = findLatestUserSubmission(userId, pq);
+                if (foundSubId != null) {
+                    subId = foundSubId;
+                }
+            }
+
+            if (subId != null) {
+                JudgeInfo info = extractJudgeInfo(pq.getQuestionType(), subId);
+                if (info != null && !isJudging(info.status())) {
+                    int earned = calculateEarnedScore(info.score(), fullScore, info.status());
+                    String status = resolvePracticeStatus(info.status(), earned, fullScore);
+
+                    if (exist != null) {
+                        int currentScore = exist.getScore() != null ? exist.getScore() : 0;
+                        int bestScore = Math.max(currentScore, earned);
+                        String bestStatus =
+                                "ACCEPTED".equals(exist.getStatus()) || "ACCEPTED".equals(status)
+                                        ? "ACCEPTED"
+                                        : (bestScore > 0 ? "PARTIAL" : status);
+                        if (bestScore != currentScore
+                                || !bestStatus.equals(exist.getStatus())
+                                || !Objects.equals(subId, exist.getSubmissionId())) {
+                            exist.setSubmissionId(subId);
+                            exist.setScore(bestScore);
+                            exist.setStatus(bestStatus);
+                            submissionMapper.updateSubmission(exist);
+                        }
+                    } else {
+                        exist =
+                                LessonPracticeSubmission.builder()
+                                        .practiceId(practice.getId())
+                                        .practiceQuestionId(pq.getId())
+                                        .userId(userId)
+                                        .questionType(pq.getQuestionType())
+                                        .submissionId(subId)
+                                        .status(status)
+                                        .score(earned)
+                                        .createdAt(LocalDateTime.now())
+                                        .build();
+                        submissionMapper.insert(exist);
+                        subByPqId.put(pq.getId(), exist);
+                    }
+                }
+            }
+        }
+
+        recalculateMemberScore(practice.getId(), userId);
     }
 
     /** 学生主动交卷。 */
@@ -524,6 +692,7 @@ public class LessonPracticeService {
         if (practice == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "课练不存在");
         }
+        checkPracticeManagePermission(practice, teacherId);
 
         int joinedCount = memberMapper.countByPracticeId(practice.getId());
         int submittedCount = memberMapper.countSubmittedByPracticeId(practice.getId());
@@ -647,6 +816,17 @@ public class LessonPracticeService {
                 .build();
     }
 
+    private void checkPracticeManagePermission(LessonPractice practice, Long teacherId) {
+        if (teacherId == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        User user = userMapper.findById(teacherId);
+        boolean isAdmin = user != null && user.getRoles() != null && user.getRoles().contains("ADMIN");
+        if (!isAdmin && !practice.getTeacherId().equals(teacherId)) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "无权管理该课练");
+        }
+    }
+
     /** 教师提前结束课练。 */
     @Transactional
     public void endPractice(String accessCode, Long teacherId) {
@@ -654,6 +834,7 @@ public class LessonPracticeService {
         if (practice == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "课练不存在");
         }
+        checkPracticeManagePermission(practice, teacherId);
         practiceMapper.updateStatusAndEndTime(practice.getId(), "ENDED", LocalDateTime.now());
     }
 
@@ -664,6 +845,7 @@ public class LessonPracticeService {
         if (practice == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "课练不存在");
         }
+        checkPracticeManagePermission(practice, teacherId);
         int newDuration = practice.getDurationMinutes() + extraMinutes;
         LocalDateTime newEndTime =
                 practice.getEndTime() != null

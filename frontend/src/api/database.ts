@@ -11,6 +11,7 @@ import type {
 export interface DbQuestionListParams {
   type?: string
   keyword?: string
+  userStatus?: string
   page?: number
   size?: number
 }

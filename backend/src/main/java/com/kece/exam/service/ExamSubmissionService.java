@@ -31,6 +31,9 @@ import com.kece.question.entity.Question;
 import com.kece.question.entity.TestCase;
 import com.kece.question.mapper.QuestionMapper;
 import com.kece.question.mapper.TestCaseMapper;
+import com.kece.question.strategy.ContestSubmissionDTO;
+import com.kece.question.strategy.QuestionStrategyFactory;
+import com.kece.question.strategy.QuestionTypeStrategy;
 import com.kece.submission.entity.Submission;
 import com.kece.submission.enums.SubmissionStatus;
 import com.kece.submission.mapper.SubmissionMapper;
@@ -67,6 +70,7 @@ public class ExamSubmissionService {
     private final DbSubmissionMapper dbSubmissionMapper;
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
+    private final QuestionStrategyFactory strategyFactory;
 
     /** 保存作答（UPSERT by 考试+考生+快照条目）；已交卷的题目不可再改。 */
     @Transactional
@@ -162,7 +166,7 @@ public class ExamSubmissionService {
                     gradeObjective(row, examQuestion);
                     graded++;
                 }
-                case "ALGO", "DB" -> {
+                case "ALGO", "DB", "DATABASE" -> {
                     // ACM：考试中已实时提交过的题目不重复入队，成绩取最后一次提交
                     if (!acm || !hasContestSubmission(exam, user, examQuestion)) {
                         if ("ALGO".equals(examQuestion.getQuestionType())) {
@@ -213,10 +217,10 @@ public class ExamSubmissionService {
         Long submissionId;
         switch (examQuestion.getQuestionType()) {
             case "ALGO" -> submissionId = enqueueCode(row, examQuestion);
-            case "DB" -> submissionId = enqueueDb(row, examQuestion);
+            case "DB", "DATABASE" -> submissionId = enqueueDb(row, examQuestion);
             case "OBJECTIVE" ->
                     throw new BusinessException(ResultCode.PARAM_ERROR, "客观题在交卷后统一判分，考试中不支持单题提交");
-            default -> throw new BusinessException(ResultCode.PARAM_ERROR, "不支持的题型");
+            default -> throw new BusinessException(ResultCode.PARAM_ERROR, "不支持的题型: " + examQuestion.getQuestionType());
         }
         if (submissionId == null) {
             throw new BusinessException(ResultCode.SYSTEM_ERROR, "题目数据缺失，提交失败");
@@ -230,14 +234,9 @@ public class ExamSubmissionService {
 
     /** 该考试该考生该题是否已有实时提交（ACM 交卷时避免重复入队）。 */
     private boolean hasContestSubmission(Exam exam, AuthUser user, ExamQuestion eq) {
-        if ("ALGO".equals(eq.getQuestionType())) {
-            return codeSubmissionMapper.findLatestByContest(
-                            exam.getId(), user.getId(), eq.getQuestionId())
-                    != null;
-        }
-        return dbSubmissionMapper.findLatestByContest(
-                        exam.getId(), user.getId(), eq.getQuestionId())
-                != null;
+        return strategyFactory.findStrategy(eq.getQuestionType())
+                .flatMap(s -> s.findLatestContestSubmission(exam.getId(), user.getId(), eq.getQuestionId()))
+                .isPresent();
     }
 
     /** 我的作答与成绩：以考卷全部题目为基准返回（即使未作答也列出），代码/数据库题沙箱分数按满分折算。 */
@@ -275,26 +274,14 @@ public class ExamSubmissionService {
                             String answer = row == null ? null : row.getAnswerContent();
                             String language = row == null ? null : row.getLanguage();
 
-                            if ("ALGO".equals(type)) {
-                                Submission s =
-                                        codeSubmissionMapper.findLatestByContest(
-                                                examId, user.getId(), eq.getQuestionId());
-                                if (s != null) {
-                                    rowStatus = s.getStatus();
-                                    score = scaleScore(s.getScore(), eq.getScore());
-                                } else if (score != null) {
-                                    score = scaleScore(score, eq.getScore());
-                                }
-                            } else if ("DB".equals(type)) {
-                                DbSubmission s =
-                                        dbSubmissionMapper.findLatestByContest(
-                                                examId, user.getId(), eq.getQuestionId());
-                                if (s != null) {
-                                    rowStatus = s.getStatus();
-                                    score = scaleScore(s.getScore(), eq.getScore());
-                                } else if (score != null) {
-                                    score = scaleScore(score, eq.getScore());
-                                }
+                            ContestSubmissionDTO latest = strategyFactory.findStrategy(type)
+                                    .flatMap(s -> s.findLatestContestSubmission(examId, user.getId(), eq.getQuestionId()))
+                                    .orElse(null);
+                            if (latest != null) {
+                                rowStatus = latest.status();
+                                score = scaleScore(latest.score(), eq.getScore(), rowStatus);
+                            } else if (score != null && !"OBJECTIVE".equals(type)) {
+                                score = scaleScore(score, eq.getScore(), rowStatus);
                             }
 
                             // 未作答试题在交卷后明确给 0 分，状态设为 UNANSWERED
@@ -323,11 +310,15 @@ public class ExamSubmissionService {
                 .toList();
     }
 
-    private Integer scaleScore(Integer judgeScore, Integer fullScore) {
-        if (judgeScore == null || fullScore == null) {
-            return null;
+    private Integer scaleScore(Integer judgeScore, Integer fullScore, String status) {
+        if ("ACCEPTED".equals(status)) {
+            return fullScore != null ? fullScore : 0;
         }
-        return (int) Math.round((double) judgeScore * fullScore / 100.0);
+        if (judgeScore == null || fullScore == null || judgeScore <= 0) {
+            return 0;
+        }
+        int earned = (int) Math.round((double) judgeScore * fullScore / 100.0);
+        return Math.min(earned, fullScore);
     }
 
     /** 客观题同步判分：对错用题目当前答案，得分按快照分值折算（多选漏选半分向上取整）。 */

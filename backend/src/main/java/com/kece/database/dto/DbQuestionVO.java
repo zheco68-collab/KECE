@@ -28,6 +28,8 @@ public class DbQuestionVO {
     private boolean orderSensitive;
     private Integer status;
     private Long createdBy;
+    private String authorName;
+    private String authorAvatarUrl;
     private List<DbTestCaseVO> testCases;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

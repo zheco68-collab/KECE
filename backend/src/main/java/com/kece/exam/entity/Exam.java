@@ -28,6 +28,15 @@ public class Exam {
     /** 可见性：1公开 0私有。 */
     private Integer status;
 
+    /** 进入考试是否需要填写学生信息 1是 0否。 */
+    private Integer requireStudentInfo;
+
+    /** 学校/所属机构名称。 */
+    private String schoolName;
+
+    /** 学期/考核类别描述。 */
+    private String semester;
+
     /** 考试状态：UPCOMING/ONGOING/ENDED/CANCELLED（惰性推进）。 */
     private String sessionStatus;
 

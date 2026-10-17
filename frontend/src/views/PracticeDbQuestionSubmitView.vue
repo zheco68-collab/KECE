@@ -81,6 +81,18 @@ async function submit() {
   submitError.value = ''
   try {
     const s = await databaseApi.submit(question.value!.id, sql.value)
+    // 立即建立课练与该提交的初始关联记录，确保学生离开或刷新时也能准确定位并自动算分
+    try {
+      await practiceApi.recordPractical(code.value, {
+        practiceQuestionId: practiceQuestionId.value,
+        submissionId: s.submissionId,
+        questionType: 'DB',
+        status: 'PENDING',
+        score: 0,
+      })
+    } catch {
+      // 容错，不阻断路由
+    }
     // 提交成功后转跳至独立的评测结果页
     router.push(
       `/practice/${code.value}/db-question/${practiceQuestionId.value}/result/${s.submissionId}`,
@@ -320,6 +332,7 @@ onBeforeUnmount(() => {
   gap: 16px;
   flex-wrap: wrap;
   background: var(--surface);
+  border: 1px solid var(--line);
 }
 .header-left {
   display: flex;
@@ -333,7 +346,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   padding: 6px 12px;
   border: 1px solid var(--line);
-  background: var(--bg);
+  background: #ffffff;
   color: var(--ink-secondary);
   font-size: 13px;
   font-weight: 500;
@@ -342,8 +355,8 @@ onBeforeUnmount(() => {
   transition: all 0.15s ease;
 }
 .btn-back:hover {
-  background: var(--surface);
-  color: var(--ink);
+  background: var(--ink);
+  color: #ffffff;
   border-color: var(--ink);
 }
 .back-icon {
@@ -434,6 +447,7 @@ onBeforeUnmount(() => {
 .editor-container {
   border-radius: 0;
   background: var(--surface);
+  border: 1px solid var(--line);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -443,7 +457,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  background: var(--bg);
+  background: #e9ecef;
   border-bottom: 1px solid var(--line);
 }
 .toolbar-left,
@@ -457,7 +471,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   color: var(--ink);
   padding: 4px 10px;
-  background: var(--surface);
+  background: #ffffff;
   border: 1px solid var(--line);
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 }
@@ -467,7 +481,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   padding: 5px 12px;
   border: 1px solid var(--line);
-  background: var(--surface);
+  background: #ffffff;
   color: var(--ink-secondary);
   font-size: 12px;
   border-radius: 0;
@@ -475,8 +489,8 @@ onBeforeUnmount(() => {
   transition: all 0.15s ease;
 }
 .btn-tool:hover {
-  background: var(--bg);
-  color: var(--ink);
+  background: var(--ink);
+  color: #fff;
   border-color: var(--ink);
 }
 .btn-tool.active {
@@ -491,7 +505,7 @@ onBeforeUnmount(() => {
 
 /* 表结构参考抽屉 */
 .schema-drawer {
-  background: var(--bg);
+  background: #f8f9fa;
   border-bottom: 1px solid var(--line);
   padding: 12px 16px;
   max-height: 280px;
@@ -518,7 +532,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--bg);
+  background: #e9ecef;
   gap: 16px;
   flex-wrap: wrap;
 }

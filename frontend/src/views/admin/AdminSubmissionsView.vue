@@ -278,6 +278,7 @@ function formatTime(iso: string): string {
 const OBJECTIVE_TYPE_LABELS: Record<string, string> = {
   SINGLE: '单选',
   MULTIPLE: '多选',
+  JUDGE: '判断',
   FILL: '填空',
 };
 

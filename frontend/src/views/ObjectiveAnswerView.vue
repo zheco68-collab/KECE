@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { objectiveApi } from '@/api/objective'
 import { renderMarkdown } from '@/utils/markdown'
 import { STATUS_ABBR, statusTone } from '@/utils/submission'
 import { useUserStore } from '@/stores/user'
+import { fetchUserInfo } from '@/utils/userCache'
 import type {
   AnswerResult,
   ObjectiveQuestion,
@@ -20,6 +21,8 @@ const id = computed(() => Number(route.params.id))
 const question = ref<ObjectiveQuestion | null>(null)
 const loading = ref(true)
 const error = ref('')
+const authorName = ref('')
+const authorAvatarUrl = ref<string | null>(null)
 
 const selected = ref<string[]>([])
 const fillText = ref('')
@@ -30,6 +33,7 @@ const submitError = ref('')
 const typeLabels: Record<ObjectiveType, string> = {
   SINGLE: '单选',
   MULTIPLE: '多选',
+  JUDGE: '判断',
   FILL: '填空',
 }
 
@@ -50,6 +54,10 @@ function optionText(option: string): string {
 
 function isSingle(q: ObjectiveQuestion): boolean {
   return q.type === 'SINGLE'
+}
+
+function isJudge(q: ObjectiveQuestion): boolean {
+  return q.type === 'JUDGE'
 }
 
 function isFill(q: ObjectiveQuestion): boolean {
@@ -90,6 +98,15 @@ async function submit() {
 onMounted(async () => {
   try {
     question.value = await objectiveApi.detail(id.value)
+    if (question.value?.authorName) {
+      authorName.value = question.value.authorName
+      authorAvatarUrl.value = question.value.authorAvatarUrl || null
+    } else if (question.value?.createdBy) {
+      fetchUserInfo(question.value.createdBy).then((u) => {
+        if (u.username) authorName.value = u.username
+        if (u.avatarUrl) authorAvatarUrl.value = u.avatarUrl
+      })
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : '加载失败'
   } finally {
@@ -111,12 +128,55 @@ onMounted(async () => {
           {{ typeLabels[question.type] }}
         </span>
         <span class="score">{{ question.score }} 分</span>
+        <div v-if="question.createdBy" class="meta-item-author">
+          <span class="meta-label">出题人</span>
+          <RouterLink
+            :to="`/profile/${question.createdBy}`"
+            class="meta-author"
+            :title="`出题人：${authorName || question.authorName || '出题教师'} · 点击进入个人主页`"
+          >
+            <img
+              v-if="authorAvatarUrl || question.authorAvatarUrl"
+              :src="authorAvatarUrl || question.authorAvatarUrl!"
+              class="meta-author-avatar"
+              alt="头像"
+            />
+            <span v-else class="meta-author-fallback">
+              <svg class="meta-author-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </span>
+            <span class="meta-author-name">{{ authorName || question.authorName || '出题教师' }}</span>
+          </RouterLink>
+        </div>
       </div>
 
       <!-- eslint-disable-next-line vue/no-v-html -- 内容已由 renderMarkdown 清洗 -->
       <div class="prose card" v-html="contentHtml"></div>
 
-      <div v-if="!isFill(question)" class="options">
+      <div v-if="isJudge(question)" class="judge-options">
+        <label
+          class="judge-option"
+          :class="{ selected: selected[0] === '对' }"
+          @click="selected = ['对']"
+        >
+          <input type="radio" name="judge" :checked="selected[0] === '对'" />
+          <span class="judge-box-letter">✓</span>
+          <span class="option-text">对（正确）</span>
+        </label>
+        <label
+          class="judge-option"
+          :class="{ selected: selected[0] === '错' }"
+          @click="selected = ['错']"
+        >
+          <input type="radio" name="judge" :checked="selected[0] === '错'" />
+          <span class="judge-box-letter">✕</span>
+          <span class="option-text">错（错误）</span>
+        </label>
+      </div>
+
+      <div v-else-if="!isFill(question)" class="options">
         <label
           v-for="(opt, i) in question.options"
           :key="i"
@@ -191,6 +251,84 @@ onMounted(async () => {
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
+}
+.meta-item-author {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.meta-label {
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.meta-author {
+  display: inline-flex;
+  align-items: stretch;
+  height: 32px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 0;
+  overflow: hidden;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.meta-author:hover {
+  background: var(--surface);
+  border-color: var(--ink);
+}
+.meta-author-avatar {
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border: none;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  display: block;
+  flex-shrink: 0;
+}
+.meta-author:hover .meta-author-avatar {
+  border-right-color: var(--ink);
+}
+.meta-author-fallback {
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  color: var(--ink-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.meta-author:hover .meta-author-fallback {
+  border-right-color: var(--ink);
+  color: var(--ink);
+}
+.meta-author-svg {
+  width: 15px;
+  height: 15px;
+}
+.meta-author-name {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+}
+.meta-author:hover .meta-author-name {
+  color: var(--ink);
 }
 .score {
   color: var(--ink-tertiary);
@@ -324,5 +462,48 @@ onMounted(async () => {
 }
 .node-status.run {
   background: #9e9e9e;
+}
+.judge-options {
+  display: flex;
+  gap: 16px;
+  margin-top: 20px;
+}
+.judge-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.judge-option:hover {
+  border-color: var(--ink-tertiary);
+}
+.judge-option.selected {
+  border-color: var(--ink);
+  background: var(--bg);
+}
+.judge-option input {
+  display: none;
+}
+.judge-box-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.judge-option.selected .judge-box-letter {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
 }
 </style>

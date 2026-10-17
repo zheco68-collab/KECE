@@ -59,4 +59,31 @@ class ObjectiveGraderTest {
         AnswerResultVO result = grader.grade(question("FILL", "\\d{4}", "REGEX", 5), "2026");
         assertThat(result.isCorrect()).isTrue();
     }
+
+    @Test
+    void judge_correctAnswerIsFullScore() {
+        AnswerResultVO result = grader.grade(question("JUDGE", "对", null, 5), "对");
+        assertThat(result.isCorrect()).isTrue();
+        assertThat(result.getScore()).isEqualTo(5);
+
+        AnswerResultVO result2 = grader.grade(question("JUDGE", "错", null, 5), "错");
+        assertThat(result2.isCorrect()).isTrue();
+        assertThat(result2.getScore()).isEqualTo(5);
+    }
+
+    @Test
+    void judge_wrongAnswerIsZero() {
+        AnswerResultVO result = grader.grade(question("JUDGE", "对", null, 5), "错");
+        assertThat(result.isCorrect()).isFalse();
+        assertThat(result.getScore()).isZero();
+    }
+
+    @Test
+    void judge_tolerantFormats() {
+        AnswerResultVO result = grader.grade(question("JUDGE", "对", null, 5), "TRUE");
+        assertThat(result.isCorrect()).isTrue();
+
+        AnswerResultVO result2 = grader.grade(question("JUDGE", "错", null, 5), "F");
+        assertThat(result2.isCorrect()).isTrue();
+    }
 }

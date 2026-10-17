@@ -29,10 +29,17 @@ public class AuthInterceptor implements HandlerInterceptor {
             HttpServletRequest request, HttpServletResponse response, Object handler) {
         AuthContextHolder.clear();
         String header = request.getHeader("Authorization");
+        String token = null;
         if (header != null && header.startsWith(BEARER_PREFIX)) {
+            token = header.substring(BEARER_PREFIX.length());
+        } else {
+            // 支持在导出下载、新窗口打印等无自定义请求头的场景下通过 URL ?token= 携带令牌
+            token = request.getParameter("token");
+        }
+
+        if (token != null && !token.isBlank()) {
             try {
-                AuthContextHolder.set(
-                        jwtUtil.parseToAuthUser(header.substring(BEARER_PREFIX.length())));
+                AuthContextHolder.set(jwtUtil.parseToAuthUser(token.trim()));
             } catch (JwtException | IllegalArgumentException ignored) {
                 // 令牌无效或过期：按未认证处理，由下方权限校验决定是否放行
             }

@@ -27,6 +27,15 @@ const objectiveUserScore = computed(() => {
   return detail.value?.objectiveQuestions.reduce((sum, q) => sum + (q.userScore || 0), 0) ?? 0
 })
 
+const practicalUserScore = computed(() => {
+  return detail.value?.practicalQuestions.reduce((sum, q) => sum + (q.userScore || 0), 0) ?? 0
+})
+
+const myTotalScore = computed(() => {
+  const sumScores = objectiveUserScore.value + practicalUserScore.value
+  return Math.max(detail.value?.myScore ?? 0, sumScores)
+})
+
 const objectiveAnsweredCount = computed(() => {
   return detail.value?.objectiveQuestions.filter((q) => q.answered).length ?? 0
 })
@@ -158,7 +167,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="bento-item">
             <span class="b-label">我的当前得分</span>
-            <span class="b-value highlight">{{ detail.myScore }} 分</span>
+            <span class="b-value highlight">{{ myTotalScore }} 分</span>
           </div>
           <div class="bento-item">
             <span class="b-label">实战 AC 通过</span>
@@ -231,11 +240,14 @@ onBeforeUnmount(() => {
             v-for="(q, idx) in detail.practicalQuestions"
             :key="q.practiceQuestionId"
             class="practical-item card"
-            :class="{ solved: q.userStatus === 'ACCEPTED' }"
+            :class="{
+              solved: q.userStatus === 'ACCEPTED',
+              partial: q.userScore > 0 && q.userStatus !== 'ACCEPTED'
+            }"
           >
-            <!-- 状态标记 -->
             <div class="status-col">
-              <div v-if="q.userStatus === 'ACCEPTED'" class="status-circle solved" title="已通过">✓</div>
+              <div v-if="q.userStatus === 'ACCEPTED'" class="status-circle solved" title="已满分通过">✓</div>
+              <div v-else-if="q.userScore > 0" class="status-circle partial" title="获得部分分">◐</div>
               <div v-else-if="q.userStatus === 'WRONG_ANSWER'" class="status-circle failed" title="未完全通过">✕</div>
               <div v-else class="status-circle unsolved" title="未解答">○</div>
             </div>
@@ -265,7 +277,9 @@ onBeforeUnmount(() => {
               <div class="q-meta">
                 <span class="meta-spec">规格: {{ q.timeLimitMs }}ms / {{ Math.round(q.memoryLimitKb / 1024) }}MB</span>
                 <span class="meta-langs">语言: {{ q.languages.join(' · ') }}</span>
-                <span v-if="q.userScore > 0" class="meta-user-score">本题得分: {{ q.userScore }} 分</span>
+                <span v-if="q.userScore > 0" class="meta-user-score" :class="{ 'is-partial': q.userStatus !== 'ACCEPTED' }">
+                  本题得分: {{ q.userScore }} / {{ q.score }} 分 ({{ q.userStatus === 'ACCEPTED' ? '已满分' : '已得部分分' }})
+                </span>
               </div>
             </div>
 
@@ -273,7 +287,10 @@ onBeforeUnmount(() => {
             <div class="action-col">
               <button
                 class="btn btn-start"
-                :class="{ 'btn-view-mode': detail.mySubmitted || detail.status === 'ENDED' }"
+                :class="{
+                  'btn-view-mode': detail.mySubmitted || detail.status === 'ENDED',
+                  'btn-partial': q.userScore > 0 && q.userStatus !== 'ACCEPTED'
+                }"
                 @click="
                   q.questionType === 'ALGO'
                     ? router.push(`/practice/${detail.accessCode}/question/${q.practiceQuestionId}`)
@@ -282,8 +299,8 @@ onBeforeUnmount(() => {
               >
                 {{
                   detail.mySubmitted || detail.status === 'ENDED'
-                    ? (q.userStatus === 'ACCEPTED' ? '查看测评结果 →' : '查看题目 →')
-                    : (q.userStatus === 'ACCEPTED' ? '重新作答 →' : '开始做题 →')
+                    ? (q.userStatus === 'ACCEPTED' ? '查看测评结果 →' : (q.userScore > 0 ? '查看部分分结果 →' : '查看题目 →'))
+                    : (q.userStatus === 'ACCEPTED' ? '重新作答 →' : (q.userScore > 0 ? '继续冲满分 →' : '开始做题 →'))
                 }}
               </button>
             </div>
@@ -491,7 +508,7 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #ffffff;
+  background: var(--surface);
   border: 1px solid #1e1e1e;
   border-left: 5px solid #7048e8;
   padding: 20px 24px;
@@ -624,19 +641,24 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 16px;
   padding: 16px 20px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid #ced4da;
   border-radius: 0;
   transition: all 0.15s ease;
 }
 
 .practical-item:hover {
+  background: #ebeef2;
   border-color: #1e1e1e;
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.1);
+  box-shadow: 2px 2px 0 #1e1e1e;
 }
 
 .practical-item.solved {
   border-left: 4px solid #2b8a3e;
+}
+
+.practical-item.partial {
+  border-left: 4px solid #f59f00;
 }
 
 .status-col {
@@ -656,6 +678,11 @@ onBeforeUnmount(() => {
 
 .status-circle.solved {
   background: #2b8a3e;
+  color: #fff;
+}
+
+.status-circle.partial {
+  background: #f59f00;
   color: #fff;
 }
 
@@ -750,6 +777,10 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
+.meta-user-score.is-partial {
+  color: #e67700;
+}
+
 .btn-start {
   background: #1e1e1e;
   color: #fff;
@@ -763,6 +794,16 @@ onBeforeUnmount(() => {
 
 .btn-start:hover {
   background: #343a40;
+}
+
+.btn-start.btn-partial {
+  background: #f59f00;
+  border-color: #f59f00;
+  color: #fff;
+}
+
+.btn-start.btn-partial:hover {
+  background: #e67700;
 }
 
 .state-card {

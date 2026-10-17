@@ -35,6 +35,7 @@ type Config struct {
 	CompileMemoryMb   int
 	WorkspaceDir      string
 	WorkerID          string
+	WorkerConcurrency int
 	Images            Images
 	// 数据库判题专用：独立队列键与判题 MySQL 连接。
 	SqlQueueKey        string
@@ -55,6 +56,10 @@ func Load() Config {
 	if redisAddr == "" {
 		redisAddr = getenv("REDIS_HOST", "127.0.0.1") + ":" + getenv("REDIS_PORT", "6379")
 	}
+	defaultWs := filepath.Join(os.TempDir(), "judge")
+	if fi, err := os.Stat("/dev/shm"); err == nil && fi.IsDir() {
+		defaultWs = "/dev/shm/kece-judge"
+	}
 	return Config{
 		RedisAddr:         redisAddr,
 		RedisPassword:     getenv("REDIS_PASSWORD", ""),
@@ -71,8 +76,9 @@ func Load() Config {
 		TakeTimeout:       time.Duration(getenvInt("TAKE_TIMEOUT_SECONDS", 2)) * time.Second,
 		CompileTimeout:    time.Duration(getenvInt("COMPILE_TIMEOUT_SECONDS", 30)) * time.Second,
 		CompileMemoryMb:   getenvInt("COMPILE_MEMORY_MB", 1024),
-		WorkspaceDir:      getenv("WORKSPACE_DIR", filepath.Join(os.TempDir(), "judge")),
+		WorkspaceDir:      getenv("WORKSPACE_DIR", defaultWs),
 		WorkerID:          getenv("WORKER_ID", hostname()),
+		WorkerConcurrency: getenvInt("WORKER_CONCURRENCY", 4),
 		Images: Images{
 			CPP:    getenv("IMAGE_CPP", "gcc:13"),
 			Java:   getenv("IMAGE_JAVA", "eclipse-temurin:17-jdk"),

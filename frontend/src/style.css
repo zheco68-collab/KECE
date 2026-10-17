@@ -1,10 +1,13 @@
 :root {
-  --bg: #f7f7f7;
-  --surface: #ffffff;
+  --bg: #ffffff;
+  --surface: #f4f5f7;
+  --surface-hover: #ebeef2;
+  --surface-white: #ffffff;
   --ink: #111111;
   --ink-secondary: #555555;
   --ink-tertiary: #8a8a8a;
-  --line: #e6e6e6;
+  --line: #ced4da;
+  --line-strong: #1e1e1e;
   --button: #1e1e1e;
   --danger: #e5484d;
   --danger-bg: #fdebec;

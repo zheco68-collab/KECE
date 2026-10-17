@@ -113,6 +113,9 @@ public class SubmissionService {
         if (user == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
+        if (targetUserId != null && !targetUserId.equals(user.getId()) && !user.hasRole(Role.ADMIN) && !user.hasRole(Role.TEACHER)) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "无权查看其他用户的提交记录");
+        }
         Long userId = targetUserId != null ? targetUserId : user.getId();
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(size, 1), 100);

@@ -181,6 +181,20 @@ public class ObjectiveQuestionSeeder {
                             null,
                             "UDP",
                             "IGNORE_CASE",
+                            5),
+                    new Seed(
+                            "JUDGE",
+                            "HTTP 协议是无状态协议，在同一连接中多次请求之间默认不保留状态。",
+                            List.of("对", "错"),
+                            "对",
+                            "EXACT",
+                            5),
+                    new Seed(
+                            "JUDGE",
+                            "TCP 协议建立连接需要三次握手，断开连接也只需要三次挥手。",
+                            List.of("对", "错"),
+                            "错",
+                            "EXACT",
                             5));
 
     /** 演示作答：content 与 {@link #SEEDS} 的题干逐字节一致，作为查重锚点。 */

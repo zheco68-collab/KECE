@@ -111,6 +111,7 @@ const objStatusFilters: Array<{ value: SubmissionStatus | ''; label: string }> =
 const OBJECTIVE_TYPE_LABELS: Record<ObjectiveType, string> = {
   SINGLE: '单选题',
   MULTIPLE: '多选题',
+  JUDGE: '判断题',
   FILL: '填空题',
 }
 

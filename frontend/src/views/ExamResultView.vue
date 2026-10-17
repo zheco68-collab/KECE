@@ -34,19 +34,37 @@ const myRankInfo = computed(() => {
   )
 })
 
+const normalizedResults = computed(() => {
+  return results.value.map((r) => {
+    let score = r.score
+    if (score != null) {
+      if (r.status === 'ACCEPTED') {
+        score = r.fullScore
+      } else if (score > r.fullScore) {
+        score = Math.min(r.fullScore, Math.round((score * r.fullScore) / 100))
+      }
+    }
+    return { ...r, score }
+  })
+})
+
 const myTotalScore = computed(() => {
-  if (myRankInfo.value) return myRankInfo.value.totalScore
-  return results.value.reduce((acc, r) => acc + (r.score ?? 0), 0)
+  if (myRankInfo.value) {
+    if (myFullScore.value > 0 && myRankInfo.value.totalScore > myFullScore.value) {
+      return normalizedResults.value.reduce((acc, r) => acc + (r.score ?? 0), 0)
+    }
+    return myRankInfo.value.totalScore
+  }
+  return normalizedResults.value.reduce((acc, r) => acc + (r.score ?? 0), 0)
 })
 
 const myFullScore = computed(() => {
-  if (myRankInfo.value) return myRankInfo.value.fullScore
-  return results.value.reduce((acc, r) => acc + r.fullScore, 0)
+  return normalizedResults.value.reduce((acc, r) => acc + r.fullScore, 0)
 })
 
 const mySolvedCount = computed(() => {
   if (myRankInfo.value) return myRankInfo.value.solved
-  return results.value.filter((r) => r.status === 'ACCEPTED').length
+  return normalizedResults.value.filter((r) => r.status === 'ACCEPTED').length
 })
 
 const typeLabels: Record<string, string> = {
@@ -170,11 +188,11 @@ onMounted(async () => {
           <div class="stat-square-head">通过题目数 (AC)</div>
           <div class="stat-square-body">
             <span class="stat-num ac-num mono">{{ mySolvedCount }}</span>
-            <span class="stat-unit mono">/ {{ results.length }}</span>
+            <span class="stat-unit mono">/ {{ normalizedResults.length }}</span>
           </div>
           <div class="stat-square-foot">
             <span class="foot-tag">
-              完成率 {{ results.length > 0 ? Math.round((mySolvedCount / results.length) * 100) : 0 }}%
+              完成率 {{ normalizedResults.length > 0 ? Math.round((mySolvedCount / normalizedResults.length) * 100) : 0 }}%
             </span>
           </div>
         </div>
@@ -199,13 +217,13 @@ onMounted(async () => {
         <div class="section-head">
           <div class="head-left">
             <h2 class="section-title">逐题得分明细与作答回溯</h2>
-            <span class="section-desc">共 {{ results.length }} 题 · 点击卡片可展开查看你在考场中的原始作答</span>
+            <span class="section-desc">共 {{ normalizedResults.length }} 题 · 点击卡片可展开查看你在考场中的原始作答</span>
           </div>
         </div>
 
         <div class="breakdown-list">
           <article
-            v-for="(row, idx) in results"
+            v-for="(row, idx) in normalizedResults"
             :key="row.examQuestionId"
             class="question-result-card card"
             :class="{ open: expandedQuestionId === row.examQuestionId }"

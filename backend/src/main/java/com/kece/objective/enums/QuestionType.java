@@ -4,5 +4,6 @@ package com.kece.objective.enums;
 public enum QuestionType {
     SINGLE,
     MULTIPLE,
-    FILL
+    FILL,
+    JUDGE
 }

@@ -46,14 +46,16 @@ const loadError = ref('')
 const TYPE_LABELS: Record<ObjectiveType, string> = {
   SINGLE: '单选',
   MULTIPLE: '多选',
+  JUDGE: '判断',
   FILL: '填空',
 }
 
 const typeOptions: Array<{ value: TypeFilter; label: string }> = [
-  { value: '', label: '全部题型' },
-  { value: 'SINGLE', label: '单选' },
-  { value: 'MULTIPLE', label: '多选' },
-  { value: 'FILL', label: '填空' },
+  { value: '', label: '全部客观题' },
+  { value: 'SINGLE', label: '单选题' },
+  { value: 'JUDGE', label: '判断题' },
+  { value: 'MULTIPLE', label: '多选题' },
+  { value: 'FILL', label: '填空题' },
 ]
 
 const statusOptions: Array<{ value: StatusFilter; label: string }> = [
@@ -158,6 +160,23 @@ onBeforeUnmount(() => {
     <h1 class="page-title">客观题管理</h1>
     <AdminNav />
 
+    <!-- 题型独立分类切换栏（单选题、判断题、多选题、填空题） -->
+    <div class="type-segment-tabs card">
+      <button
+        v-for="t in typeOptions"
+        :key="t.value || 'all'"
+        class="type-tab-btn"
+        :class="{ active: typeFilter === t.value }"
+        type="button"
+        @click="typeFilter = t.value"
+      >
+        <span class="tab-text">{{ t.label }}</span>
+        <span v-if="t.value" class="tab-badge" :class="`badge-${t.value.toLowerCase()}`">
+          {{ t.value === 'SINGLE' ? '单选' : t.value === 'JUDGE' ? '判断' : t.value === 'MULTIPLE' ? '多选' : '填空' }}
+        </span>
+      </button>
+    </div>
+
     <div class="filter-bar card">
       <input v-model="keyword" class="input keyword-input" type="search" placeholder="题干关键词" />
       <label class="filter">
@@ -185,8 +204,11 @@ onBeforeUnmount(() => {
           placeholder="创建人 ID"
         />
       </label>
-      <RouterLink class="btn btn-primary btn-sm new-btn" to="/admin/objective-questions/new">
-        新建
+      <RouterLink
+        class="btn btn-primary btn-sm new-btn"
+        :to="typeFilter ? `/admin/objective-questions/new?type=${typeFilter}` : '/admin/objective-questions/new'"
+      >
+        + 新建{{ typeFilter ? TYPE_LABELS[typeFilter as ObjectiveType] + '题' : '客观题' }}
       </RouterLink>
     </div>
 
@@ -300,12 +322,79 @@ onBeforeUnmount(() => {
   color: var(--ink-tertiary);
   font-size: 13px;
 }
-.row-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 .btn-danger {
   color: var(--danger);
+}
+
+/* 分类切换分段栏 (KECE 极简风格) */
+.type-segment-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.type-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #495057;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.type-tab-btn:hover {
+  background: #f1f3f5;
+  color: #1e1e1e;
+}
+
+.type-tab-btn.active {
+  background: #1e1e1e;
+  border-color: #1e1e1e;
+  color: #fff;
+}
+
+.tab-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  font-weight: 700;
+}
+
+.tab-badge.badge-single {
+  background: #e7f5ff;
+  color: #1971c2;
+}
+
+.tab-badge.badge-judge {
+  background: #ebfbee;
+  color: #2b8a3e;
+}
+
+.tab-badge.badge-multiple {
+  background: #f3f0ff;
+  color: #7950f2;
+}
+
+.tab-badge.badge-fill {
+  background: #fff9db;
+  color: #f59f00;
+}
+
+.type-tab-btn.active .tab-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+.type-judge {
+  background: #ebfbee;
+  color: #2b8a3e;
 }
 </style>

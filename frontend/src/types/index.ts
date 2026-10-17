@@ -1,6 +1,6 @@
 export type Role = 'USER' | 'TEACHER' | 'ADMIN'
 export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD'
-export type ObjectiveType = 'SINGLE' | 'MULTIPLE' | 'FILL'
+export type ObjectiveType = 'SINGLE' | 'MULTIPLE' | 'FILL' | 'JUDGE'
 export type MatchType = 'EXACT' | 'IGNORE_CASE' | 'REGEX'
 export type DbQuestionType = 'SELECT' | 'DML'
 
@@ -44,6 +44,8 @@ export interface Question {
   languages: string[]
   status: number
   createdBy: number
+  authorName?: string | null
+  authorAvatarUrl?: string | null
   sampleTestCases: TestCase[]
   createdAt: string
   updatedAt: string
@@ -59,6 +61,8 @@ export interface ObjectiveQuestion {
   score: number
   status: number
   createdBy: number
+  authorName?: string | null
+  authorAvatarUrl?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -96,6 +100,8 @@ export interface DbQuestion {
   orderSensitive: boolean
   status: number
   createdBy: number
+  authorName?: string | null
+  authorAvatarUrl?: string | null
   testCases: DbTestCase[]
   createdAt: string
   updatedAt: string

@@ -61,6 +61,21 @@ public class ExamSessionController {
         return ApiResponse.success(examService.enter(id));
     }
 
+    @Operation(summary = "考生登记实名身份信息（进入要求登记信息的考试时调用）")
+    @RequireRole
+    @PostMapping("/{id}/student-info")
+    public ApiResponse<com.kece.exam.dto.ExamStudentInfoVO> saveStudentInfo(
+            @PathVariable Long id, @Valid @RequestBody com.kece.exam.dto.ExamStudentInfoRequest request) {
+        return ApiResponse.success(examService.saveStudentInfo(id, request));
+    }
+
+    @Operation(summary = "查询考生在本次考试中的实名登记信息")
+    @RequireRole
+    @GetMapping("/{id}/student-info")
+    public ApiResponse<com.kece.exam.dto.ExamStudentInfoVO> getStudentInfo(@PathVariable Long id) {
+        return ApiResponse.success(examService.getStudentInfo(id));
+    }
+
     @Operation(summary = "保存作答（UPSERT，已交卷的题目不可再改）")
     @RequireRole
     @PutMapping("/{id}/answers")

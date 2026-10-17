@@ -37,7 +37,7 @@ export interface PracticeSummary {
 export interface PracticeObjectiveQuestion {
   practiceQuestionId: number
   questionId: number
-  type: 'SINGLE' | 'MULTIPLE' | 'FILL'
+  type: 'SINGLE' | 'MULTIPLE' | 'FILL' | 'JUDGE'
   content: string
   options: string[]
   score: number
@@ -59,7 +59,7 @@ export interface PracticePracticalQuestion {
   timeLimitMs: number
   memoryLimitKb: number
   languages: string[]
-  userStatus: 'ACCEPTED' | 'WRONG_ANSWER' | 'PENDING' | 'UNATTEMPTED'
+  userStatus: 'ACCEPTED' | 'WRONG_ANSWER' | 'PENDING' | 'UNATTEMPTED' | 'PARTIAL' | string
   userScore: number
   submissionId?: number
 }

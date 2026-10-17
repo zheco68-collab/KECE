@@ -215,3 +215,170 @@ func truncate(s string, n int) string {
 	}
 	return s[:n]
 }
+
+// Session 表示单次提交生命周期内复用的沙箱容器。
+type Session struct {
+	runner      *Runner
+	containerID string
+	ws          string
+	lang        string
+	memoryMb    int
+}
+
+// StartSession 启动一个单次提交沙箱容器，供后续编译与全部测试用例复用。
+func (r *Runner) StartSession(ctx context.Context, lang, ws string, runMemoryMb int) (*Session, error) {
+	image := r.imageFor(lang)
+	if image == "" {
+		return nil, fmt.Errorf("no image for language: %s", lang)
+	}
+
+	_, needCompile := compileCommand(lang)
+	initMem := runMemoryMb
+	if needCompile && r.CompileMemoryMb > initMem {
+		initMem = r.CompileMemoryMb
+	}
+
+	args := []string{
+		"run", "-d",
+		"--network", "none",
+		"--memory", fmt.Sprintf("%dm", initMem),
+		"--memory-swap", fmt.Sprintf("%dm", initMem),
+		"--pids-limit", "64",
+		"--cpus", "1",
+		"--cap-drop", "ALL",
+		"--security-opt", "no-new-privileges",
+		"-v", ws + ":/work",
+		"-w", "/work",
+		image,
+		"sleep", "3600",
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	stdout, stderr, code, err := runDocker(timeoutCtx, args)
+	if err != nil || code != 0 {
+		return nil, fmt.Errorf("start session container (code=%d, stderr=%s): %w", code, stderr, err)
+	}
+
+	cid := strings.TrimSpace(stdout)
+	if len(cid) < 12 {
+		return nil, fmt.Errorf("invalid container id: %s", stdout)
+	}
+
+	return &Session{
+		runner:      r,
+		containerID: cid,
+		ws:          ws,
+		lang:        lang,
+		memoryMb:    initMem,
+	}, nil
+}
+
+// Close 销毁沙箱容器并清理资源。
+func (s *Session) Close(ctx context.Context) error {
+	if s == nil || s.containerID == "" {
+		return nil
+	}
+	args := []string{"rm", "-f", s.containerID}
+	_, _, _, err := runDocker(ctx, args)
+	return err
+}
+
+// ApplyRunMemoryLimit 在编译完成后将容器内存限制收缩到题目的运行内存限制。
+func (s *Session) ApplyRunMemoryLimit(ctx context.Context, targetMemoryMb int) error {
+	if s == nil || s.containerID == "" || targetMemoryMb <= 0 {
+		return nil
+	}
+	if s.memoryMb == targetMemoryMb {
+		return nil
+	}
+	args := []string{
+		"update",
+		"--memory", fmt.Sprintf("%dm", targetMemoryMb),
+		"--memory-swap", fmt.Sprintf("%dm", targetMemoryMb),
+		s.containerID,
+	}
+	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	_, _, code, err := runDocker(timeoutCtx, args)
+	if err == nil && code == 0 {
+		s.memoryMb = targetMemoryMb
+	}
+	return err
+}
+
+// Compile 在复用的容器中执行编译命令。
+func (s *Session) Compile(ctx context.Context) (stderr string, ok bool, err error) {
+	shell, need := compileCommand(s.lang)
+	if !need {
+		return "", true, nil
+	}
+	timeoutCtx, cancel := context.WithTimeout(ctx, s.runner.CompileTimeout)
+	defer cancel()
+
+	args := []string{"exec", s.containerID, "sh", "-c", shell}
+	_, stderr, code, err := runDocker(timeoutCtx, args)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", false, ctx.Err()
+		}
+		if timeoutCtx.Err() != nil {
+			return "compile timed out", false, nil
+		}
+		return "", false, fmt.Errorf("docker exec compile: %w", err)
+	}
+	return truncate(stderr, maxStderrBytes), code == 0, nil
+}
+
+// Run 在复用的容器中执行单个测试用例。
+func (s *Session) Run(ctx context.Context, input string, timeLimitMs int) (RunResult, error) {
+	res := RunResult{}
+	sec := fmt.Sprintf("%.3f", float64(timeLimitMs)/1000.0)
+	shell := runCommand(s.lang, sec)
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(timeLimitMs)*time.Millisecond+backstopBuffer)
+	defer cancel()
+
+	memPath := filepath.Join(s.ws, memProbeName)
+	_ = os.Remove(memPath)
+
+	start := time.Now()
+	args := []string{"exec", s.containerID, "sh", "-c", shell}
+	stdout, stderr, code, err := runDocker(timeoutCtx, args)
+	res.Elapsed = time.Since(start)
+	res.Stdout = truncate(stdout, maxOutputBytes)
+	res.Stderr = truncate(stderr, maxStderrBytes)
+	res.ExitCode = code
+	res.MemoryKb = readMemProbe(memPath)
+	if err != nil {
+		switch {
+		case ctx.Err() != nil:
+			return res, ctx.Err()
+		case timeoutCtx.Err() != nil:
+			res.ExitCode = exitKill
+			return res, nil
+		default:
+			return res, fmt.Errorf("docker exec run: %w", err)
+		}
+	}
+	return res, nil
+}
+
+// Prewarm 在后台预热基础沙箱镜像，将镜像载入 Linux 内存页缓存，避免首次判题冷启动。
+func (r *Runner) Prewarm(ctx context.Context) {
+	images := []string{r.ImageCPP, r.ImageJava, r.ImagePython, r.ImageArkTS}
+	for _, img := range images {
+		if img == "" {
+			continue
+		}
+		go func(image string) {
+			timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			args := []string{"run", "--rm", image, "true"}
+			_, _, _, _ = runDocker(timeoutCtx, args)
+		}(img)
+	}
+}
+

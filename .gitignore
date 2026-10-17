@@ -35,6 +35,7 @@ target/
 # Go
 judger/bin/
 judger/judger
+judger/judger_linux
 judger/vendor/
 *.exe
 *.exe~

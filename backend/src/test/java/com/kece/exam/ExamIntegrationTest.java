@@ -354,5 +354,58 @@ class ExamIntegrationTest extends AbstractIntegrationTest {
                         .andExpect(status().isOk())
                         .andReturn();
         assertThat(code(result)).isEqualTo(4001);
+
+        // teacher1 出一道公开题，teacher2 同样不能组卷（教师只能选自己出的题）
+        long publicQid =
+                createAlgoQuestion(token, "公开题_" + UUID.randomUUID().toString().substring(0, 8), 1);
+        MvcResult teacher2PublicResult =
+                mockMvc.perform(
+                                post("/exams")
+                                        .header("Authorization", "Bearer " + teacher2)
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                objectMapper.writeValueAsString(
+                                                        examBody(
+                                                                "选他人公开题_"
+                                                                        + UUID.randomUUID()
+                                                                                .toString()
+                                                                                .substring(0, 8),
+                                                                60,
+                                                                List.of(
+                                                                        Map.of(
+                                                                                "questionType",
+                                                                                "ALGO",
+                                                                                "questionId",
+                                                                                publicQid,
+                                                                                "score",
+                                                                                10))))))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        assertThat(code(teacher2PublicResult)).isEqualTo(4001);
+
+        // 管理员没有限制：可以选 teacher1 出的题进行组卷
+        MvcResult adminResult =
+                mockMvc.perform(
+                                post("/exams")
+                                        .header("Authorization", "Bearer " + admin)
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                objectMapper.writeValueAsString(
+                                                        examBody(
+                                                                "管理员组卷_"
+                                                                        + UUID.randomUUID()
+                                                                                .toString()
+                                                                                .substring(0, 8),
+                                                                60,
+                                                                List.of(
+                                                                        Map.of(
+                                                                                "questionType",
+                                                                                "ALGO",
+                                                                                "questionId",
+                                                                                publicQid,
+                                                                                "score",
+                                                                                10))))))
+                        .andExpect(status().isOk())
+                        .andReturn();
     }
 }

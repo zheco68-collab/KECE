@@ -15,6 +15,8 @@ import com.kece.question.entity.TestCase;
 import com.kece.question.mapper.QuestionMapper;
 import com.kece.question.mapper.TestCaseMapper;
 import com.kece.submission.mapper.SubmissionMapper;
+import com.kece.user.entity.User;
+import com.kece.user.mapper.UserMapper;
 import java.util.Arrays;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -29,16 +31,47 @@ public class QuestionService {
     private final QuestionMapper questionMapper;
     private final TestCaseMapper testCaseMapper;
     private final SubmissionMapper submissionMapper;
+    private final UserMapper userMapper;
 
     public PageResult<QuestionVO> list(
             String keyword, String difficulty, int page, int size, boolean all) {
+        return list(keyword, difficulty, null, page, size, all);
+    }
+
+    public PageResult<QuestionVO> list(
+            String keyword, String difficulty, String userStatus, int page, int size, boolean all) {
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(size, 1), 100);
         int offset = (safePage - 1) * safeSize;
         Integer status = (all && isPrivileged()) ? null : 1;
+
+        List<Long> includeIds = null;
+        List<Long> excludeIds = null;
+        if (userStatus != null && !userStatus.isBlank()) {
+            Long userId = AuthContextHolder.currentUserId();
+            if (userId == null) {
+                if ("SOLVED".equalsIgnoreCase(userStatus)) {
+                    return new PageResult<>(List.of(), 0, safePage, safeSize);
+                }
+            } else {
+                List<Long> solvedIds = submissionMapper.findAcceptedQuestionIds(userId);
+                if ("SOLVED".equalsIgnoreCase(userStatus)) {
+                    if (solvedIds == null || solvedIds.isEmpty()) {
+                        return new PageResult<>(List.of(), 0, safePage, safeSize);
+                    }
+                    includeIds = solvedIds;
+                } else if ("UNSOLVED".equalsIgnoreCase(userStatus)) {
+                    if (solvedIds != null && !solvedIds.isEmpty()) {
+                        excludeIds = solvedIds;
+                    }
+                }
+            }
+        }
+
         List<Question> questions =
-                questionMapper.findPage(keyword, difficulty, status, null, offset, safeSize);
-        long total = questionMapper.count(keyword, difficulty, status, null);
+                questionMapper.findPage(
+                        keyword, difficulty, status, null, includeIds, excludeIds, offset, safeSize);
+        long total = questionMapper.count(keyword, difficulty, status, null, includeIds, excludeIds);
         return new PageResult<>(
                 questions.stream().map(this::toVO).toList(), total, safePage, safeSize);
     }
@@ -56,8 +89,8 @@ public class QuestionService {
         }
         List<Question> questions =
                 questionMapper.findPage(
-                        keyword, difficulty, status, targetCreatedBy, offset, safeSize);
-        long total = questionMapper.count(keyword, difficulty, status, targetCreatedBy);
+                        keyword, difficulty, status, targetCreatedBy, null, null, offset, safeSize);
+        long total = questionMapper.count(keyword, difficulty, status, targetCreatedBy, null, null);
         return new PageResult<>(
                 questions.stream().map(this::toVO).toList(), total, safePage, safeSize);
     }
@@ -207,6 +240,7 @@ public class QuestionService {
                 testCaseMapper.findSamplesByQuestionId(question.getId()).stream()
                         .map(this::toTestCaseVO)
                         .toList();
+        User author = question.getCreatedBy() != null ? userMapper.findById(question.getCreatedBy()) : null;
         return QuestionVO.builder()
                 .id(question.getId())
                 .title(question.getTitle())
@@ -217,6 +251,8 @@ public class QuestionService {
                 .languages(splitLanguages(question.getLanguages()))
                 .status(question.getStatus())
                 .createdBy(question.getCreatedBy())
+                .authorName(author != null ? author.getUsername() : null)
+                .authorAvatarUrl(author != null ? author.getAvatarUrl() : null)
                 .sampleTestCases(samples)
                 .createdAt(question.getCreatedAt())
                 .updatedAt(question.getUpdatedAt())

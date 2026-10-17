@@ -38,10 +38,11 @@ public class QuestionController {
     public ApiResponse<PageResult<QuestionVO>> list(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String difficulty,
+            @RequestParam(required = false) String userStatus,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "false") boolean all) {
-        return ApiResponse.success(questionService.list(keyword, difficulty, page, size, all));
+        return ApiResponse.success(questionService.list(keyword, difficulty, userStatus, page, size, all));
     }
 
     @Operation(summary = "题目详情")

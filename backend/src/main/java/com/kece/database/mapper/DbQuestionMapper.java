@@ -25,6 +25,8 @@ public interface DbQuestionMapper {
             @Param("keyword") String keyword,
             @Param("status") Integer status,
             @Param("createdBy") Long createdBy,
+            @Param("includeIds") List<Long> includeIds,
+            @Param("excludeIds") List<Long> excludeIds,
             @Param("offset") int offset,
             @Param("size") int size);
 
@@ -32,5 +34,7 @@ public interface DbQuestionMapper {
             @Param("type") String type,
             @Param("keyword") String keyword,
             @Param("status") Integer status,
-            @Param("createdBy") Long createdBy);
+            @Param("createdBy") Long createdBy,
+            @Param("includeIds") List<Long> includeIds,
+            @Param("excludeIds") List<Long> excludeIds);
 }

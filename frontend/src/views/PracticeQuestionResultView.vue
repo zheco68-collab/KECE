@@ -62,18 +62,36 @@ async function syncScoreToPractice(s: Submission) {
   if (recorded) return
   recorded = true
   const isAc = s.status === 'ACCEPTED'
-  const score = isAc ? (practiceQuestion.value?.score ?? 10) : 0
+  const fullScore = practiceQuestion.value?.score ?? 10
+  let score = 0
+  if (isAc) {
+    score = fullScore
+  } else if (s.result?.score != null && s.result.score > 0) {
+    score = Math.round((s.result.score * fullScore) / 100)
+    if (score === 0 && fullScore > 0) score = 1
+  } else if (s.result?.testCasesReport && s.result.testCasesReport.length > 0) {
+    const passed = s.result.testCasesReport.filter((tc) => tc.status === 'ACCEPTED').length
+    if (passed > 0) {
+      score = Math.round((passed * fullScore) / s.result.testCasesReport.length)
+      if (score === 0 && fullScore > 0) score = 1
+    }
+  }
+  if (score > fullScore) score = fullScore
+
+  const finalStatus = isAc ? 'ACCEPTED' : (score > 0 ? 'PARTIAL' : s.status)
+
   try {
     await practiceApi.recordPractical(code.value, {
       practiceQuestionId: practiceQuestionId.value,
       submissionId: s.submissionId,
       questionType: 'ALGO',
-      status: s.status,
+      status: finalStatus,
       score,
     })
     if (practiceQuestion.value) {
-      practiceQuestion.value.userStatus = isAc ? 'ACCEPTED' : 'WRONG_ANSWER'
+      practiceQuestion.value.userStatus = finalStatus
       practiceQuestion.value.submissionId = s.submissionId
+      practiceQuestion.value.userScore = score
     }
   } catch {
     // ignore

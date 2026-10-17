@@ -19,6 +19,8 @@ public class QuestionVO {
     private List<String> languages;
     private Integer status;
     private Long createdBy;
+    private String authorName;
+    private String authorAvatarUrl;
 
     /** 对用户可见的样例用例。 */
     private List<TestCaseVO> sampleTestCases;

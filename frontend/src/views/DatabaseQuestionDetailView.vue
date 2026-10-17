@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { databaseApi } from '@/api/database'
 import { renderMarkdown } from '@/utils/markdown'
 import { useUserStore } from '@/stores/user'
 import type { DbQuestion, DbQuestionType } from '@/types'
 import DbSchemaViewer from '@/components/DbSchemaViewer.vue'
 import DbSampleViewer from '@/components/DbSampleViewer.vue'
+import { fetchUserInfo } from '@/utils/userCache'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,6 +19,8 @@ const question = ref<DbQuestion | null>(null)
 const loading = ref(true)
 const error = ref('')
 const isSolved = ref(false)
+const authorName = ref('')
+const authorAvatarUrl = ref<string | null>(null)
 
 const typeLabels: Record<DbQuestionType, string> = {
   SELECT: 'SELECT 查询',
@@ -46,6 +49,15 @@ async function loadSolvedStatus() {
 onMounted(async () => {
   try {
     question.value = await databaseApi.detail(id.value)
+    if (question.value?.authorName) {
+      authorName.value = question.value.authorName
+      authorAvatarUrl.value = question.value.authorAvatarUrl || null
+    } else if (question.value?.createdBy) {
+      fetchUserInfo(question.value.createdBy).then((u) => {
+        if (u.username) authorName.value = u.username
+        if (u.avatarUrl) authorAvatarUrl.value = u.avatarUrl
+      })
+    }
     await loadSolvedStatus()
   } catch (e) {
     error.value = e instanceof Error ? e.message : '加载题目失败'
@@ -124,6 +136,28 @@ onMounted(async () => {
           <div class="meta-item">
             <span class="meta-label">执行沙箱</span>
             <span class="meta-val">专用隔离 MySQL 实例</span>
+          </div>
+          <div v-if="question.createdBy" class="meta-item meta-item-author">
+            <span class="meta-label">出题人</span>
+            <RouterLink
+              :to="`/profile/${question.createdBy}`"
+              class="meta-author"
+              :title="`出题人：${authorName || question.authorName || '出题教师'} · 点击进入个人主页`"
+            >
+              <img
+                v-if="authorAvatarUrl || question.authorAvatarUrl"
+                :src="authorAvatarUrl || question.authorAvatarUrl!"
+                class="meta-author-avatar"
+                alt="头像"
+              />
+              <span v-else class="meta-author-fallback">
+                <svg class="meta-author-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              </span>
+              <span class="meta-author-name">{{ authorName || question.authorName || '出题教师' }}</span>
+            </RouterLink>
           </div>
         </div>
       </header>
@@ -280,6 +314,75 @@ onMounted(async () => {
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
+}
+.meta-item-author {
+  margin-left: auto;
+}
+.meta-author {
+  display: inline-flex;
+  align-items: stretch;
+  height: 32px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 0;
+  overflow: hidden;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.meta-author:hover {
+  background: var(--surface);
+  border-color: var(--ink);
+}
+.meta-author-avatar {
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border: none;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  display: block;
+  flex-shrink: 0;
+}
+.meta-author:hover .meta-author-avatar {
+  border-right-color: var(--ink);
+}
+.meta-author-fallback {
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  color: var(--ink-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.meta-author:hover .meta-author-fallback {
+  border-right-color: var(--ink);
+  color: var(--ink);
+}
+.meta-author-svg {
+  width: 15px;
+  height: 15px;
+}
+.meta-author-name {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+}
+.meta-author:hover .meta-author-name {
+  color: var(--ink);
 }
 .q-title {
   margin: 0;

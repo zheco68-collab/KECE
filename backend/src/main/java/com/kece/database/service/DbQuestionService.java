@@ -15,6 +15,8 @@ import com.kece.database.entity.DbTestCase;
 import com.kece.database.mapper.DbQuestionMapper;
 import com.kece.database.mapper.DbSubmissionMapper;
 import com.kece.database.mapper.DbTestCaseMapper;
+import com.kece.user.entity.User;
+import com.kece.user.mapper.UserMapper;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -29,16 +31,47 @@ public class DbQuestionService {
     private final DbQuestionMapper questionMapper;
     private final DbTestCaseMapper testCaseMapper;
     private final DbSubmissionMapper submissionMapper;
+    private final UserMapper userMapper;
 
     public PageResult<DbQuestionVO> list(
             String type, String keyword, int page, int size, boolean all) {
+        return list(type, keyword, null, page, size, all);
+    }
+
+    public PageResult<DbQuestionVO> list(
+            String type, String keyword, String userStatus, int page, int size, boolean all) {
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(size, 1), 100);
         int offset = (safePage - 1) * safeSize;
         Integer status = (all && isPrivileged()) ? null : 1;
+
+        List<Long> includeIds = null;
+        List<Long> excludeIds = null;
+        if (userStatus != null && !userStatus.isBlank()) {
+            Long userId = AuthContextHolder.currentUserId();
+            if (userId == null) {
+                if ("SOLVED".equalsIgnoreCase(userStatus)) {
+                    return new PageResult<>(List.of(), 0, safePage, safeSize);
+                }
+            } else {
+                List<Long> solvedIds = submissionMapper.findAcceptedQuestionIds(userId);
+                if ("SOLVED".equalsIgnoreCase(userStatus)) {
+                    if (solvedIds == null || solvedIds.isEmpty()) {
+                        return new PageResult<>(List.of(), 0, safePage, safeSize);
+                    }
+                    includeIds = solvedIds;
+                } else if ("UNSOLVED".equalsIgnoreCase(userStatus)) {
+                    if (solvedIds != null && !solvedIds.isEmpty()) {
+                        excludeIds = solvedIds;
+                    }
+                }
+            }
+        }
+
         List<DbQuestion> items =
-                questionMapper.findPage(type, keyword, status, null, offset, safeSize);
-        long total = questionMapper.count(type, keyword, status, null);
+                questionMapper.findPage(
+                        type, keyword, status, null, includeIds, excludeIds, offset, safeSize);
+        long total = questionMapper.count(type, keyword, status, null, includeIds, excludeIds);
         boolean privileged = isPrivileged();
         return new PageResult<>(
                 items.stream().map(q -> toVO(q, privileged, false)).toList(),
@@ -59,8 +92,9 @@ public class DbQuestionService {
             targetCreatedBy = AuthContextHolder.currentUserId();
         }
         List<DbQuestion> items =
-                questionMapper.findPage(type, keyword, status, targetCreatedBy, offset, safeSize);
-        long total = questionMapper.count(type, keyword, status, targetCreatedBy);
+                questionMapper.findPage(
+                        type, keyword, status, targetCreatedBy, null, null, offset, safeSize);
+        long total = questionMapper.count(type, keyword, status, targetCreatedBy, null, null);
         return new PageResult<>(
                 items.stream().map(q -> toVO(q, true, false)).toList(), total, safePage, safeSize);
     }
@@ -178,6 +212,7 @@ public class DbQuestionService {
 
     private DbQuestionVO toVO(DbQuestion question, boolean privileged, boolean withCases) {
         List<DbTestCaseVO> caseVOs = withCases ? buildCaseVOs(question.getId(), privileged) : List.of();
+        User author = question.getCreatedBy() != null ? userMapper.findById(question.getCreatedBy()) : null;
         return DbQuestionVO.builder()
                 .id(question.getId())
                 .title(question.getTitle())
@@ -191,6 +226,8 @@ public class DbQuestionService {
                         question.getOrderSensitive() != null && question.getOrderSensitive() == 1)
                 .status(question.getStatus())
                 .createdBy(question.getCreatedBy())
+                .authorName(author != null ? author.getUsername() : null)
+                .authorAvatarUrl(author != null ? author.getAvatarUrl() : null)
                 .testCases(caseVOs)
                 .createdAt(question.getCreatedAt())
                 .updatedAt(question.getUpdatedAt())

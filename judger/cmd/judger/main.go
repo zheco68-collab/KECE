@@ -50,11 +50,19 @@ func main() {
 
 	go heartbeatLoop(ctx, q, cfg.HeartbeatInterval)
 	go reapLoop(ctx, q, cfg.ReapInterval)
-	go workerLoop(ctx, cfg, j, q)
+	for i := 0; i < cfg.WorkerConcurrency; i++ {
+		go workerLoop(ctx, cfg, j, q, i+1)
+	}
 	go reapLoop(ctx, sqlQ, cfg.ReapInterval)
-	go sqlWorkerLoop(ctx, cfg, j, sqlQ)
+	for i := 0; i < cfg.WorkerConcurrency; i++ {
+		go sqlWorkerLoop(ctx, cfg, j, sqlQ, i+1)
+	}
 
-	log.Printf("judger started: worker=%s redis=%s", cfg.WorkerID, cfg.RedisAddr)
+	// 启动时在后台预热所有沙箱镜像，将镜像载入 Linux 内存页缓存
+	go runner.Prewarm(ctx)
+
+	log.Printf("judger started: worker=%s redis=%s concurrency=%d workspace=%s",
+		cfg.WorkerID, cfg.RedisAddr, cfg.WorkerConcurrency, cfg.WorkspaceDir)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
@@ -65,14 +73,14 @@ func main() {
 }
 
 // workerLoop 循环拉取并处理任务，直至上下文取消。
-func workerLoop(ctx context.Context, cfg config.Config, j *judge.Judge, q *queue.Queue) {
+func workerLoop(ctx context.Context, cfg config.Config, j *judge.Judge, q *queue.Queue, workerID int) {
 	for {
 		taskJSON, ok, err := q.Take(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
 			}
-			log.Printf("take task: %v", err)
+			log.Printf("[worker-%d] take task: %v", workerID, err)
 			time.Sleep(time.Second)
 			continue
 		}
@@ -82,7 +90,7 @@ func workerLoop(ctx context.Context, cfg config.Config, j *judge.Judge, q *queue
 
 		task, err := judge.ParseTask(taskJSON)
 		if err != nil {
-			log.Printf("parse task: %v", err)
+			log.Printf("[worker-%d] parse task: %v", workerID, err)
 			_ = q.RemoveProcessing(ctx, taskJSON)
 			continue
 		}
@@ -97,14 +105,14 @@ func workerLoop(ctx context.Context, cfg config.Config, j *judge.Judge, q *queue
 }
 
 // sqlWorkerLoop 循环拉取并处理数据库判题任务，与 workerLoop 同构，作用于独立队列。
-func sqlWorkerLoop(ctx context.Context, cfg config.Config, j *judge.Judge, sqlQ *queue.Queue) {
+func sqlWorkerLoop(ctx context.Context, cfg config.Config, j *judge.Judge, sqlQ *queue.Queue, workerID int) {
 	for {
 		taskJSON, ok, err := sqlQ.Take(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
 			}
-			log.Printf("take sql task: %v", err)
+			log.Printf("[sql-worker-%d] take sql task: %v", workerID, err)
 			time.Sleep(time.Second)
 			continue
 		}
@@ -114,7 +122,7 @@ func sqlWorkerLoop(ctx context.Context, cfg config.Config, j *judge.Judge, sqlQ 
 
 		task, err := judge.ParseTask(taskJSON)
 		if err != nil {
-			log.Printf("parse sql task: %v", err)
+			log.Printf("[sql-worker-%d] parse sql task: %v", workerID, err)
 			_ = sqlQ.RemoveProcessing(ctx, taskJSON)
 			continue
 		}

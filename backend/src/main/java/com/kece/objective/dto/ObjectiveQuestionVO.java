@@ -18,6 +18,8 @@ public class ObjectiveQuestionVO {
     private String matchType;
     private Integer score;
     private Long createdBy;
+    private String authorName;
+    private String authorAvatarUrl;
     private Integer status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

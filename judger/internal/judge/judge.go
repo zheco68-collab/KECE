@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/zheco68-collab/KECE/judger/internal/compare"
 	"github.com/zheco68-collab/KECE/judger/internal/config"
@@ -46,17 +47,36 @@ func (j *Judge) Process(ctx context.Context, task model.Task) {
 		return
 	}
 	defer os.RemoveAll(ws)
+	_ = os.Chmod(ws, 0o777)
 
 	// 1. 落盘源码。
 	filename := filenameFor(task.Language)
-	if err := os.WriteFile(filepath.Join(ws, filename), []byte(extractCode(task, filename)), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ws, filename), []byte(extractCode(task, filename)), 0o666); err != nil {
 		j.finishSystemError(ctx, task.SubmissionID)
 		return
 	}
 
+	// 启动单次提交沙箱会话（复用容器，避免逐用例 cold start）
+	sess, _ := j.runner.StartSession(ctx, task.Language, ws, task.MemoryLimitMb)
+	if sess != nil {
+		defer func() {
+			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = sess.Close(closeCtx)
+		}()
+	}
+
 	// 2. 编译。
 	j.publish(ctx, task.SubmissionID, statusCompiling, len(task.TestCases), 0)
-	stderr, ok, err := j.runner.Compile(ctx, task.Language, ws)
+	var (
+		stderr string
+		ok     bool
+	)
+	if sess != nil {
+		stderr, ok, err = sess.Compile(ctx)
+	} else {
+		stderr, ok, err = j.runner.Compile(ctx, task.Language, ws)
+	}
 	if err != nil {
 		j.finishSystemError(ctx, task.SubmissionID)
 		return
@@ -64,6 +84,11 @@ func (j *Judge) Process(ctx context.Context, task model.Task) {
 	if !ok {
 		j.finishCompileError(ctx, task.SubmissionID, stderr)
 		return
+	}
+
+	// 编译成功后，将会话容器内存上限收缩至题目的运行内存限制
+	if sess != nil {
+		_ = sess.ApplyRunMemoryLimit(ctx, task.MemoryLimitMb)
 	}
 
 	// 3. 逐用例运行并汇总。
@@ -74,7 +99,7 @@ func (j *Judge) Process(ctx context.Context, task model.Task) {
 	// 各用例峰值内存的最大值；全部用例都测不到时保持 nil，不伪造成 0。
 	var maxMemKb *int
 	for i, tc := range task.TestCases {
-		cr, err := j.runCase(ctx, task, ws, tc)
+		cr, err := j.runCaseWithSession(ctx, task, ws, tc, sess)
 		if err != nil {
 			j.finishSystemError(ctx, task.SubmissionID)
 			return
@@ -104,10 +129,23 @@ func (j *Judge) Process(ctx context.Context, task model.Task) {
 
 // runCase 运行单个测试点并返回其判题结果。
 func (j *Judge) runCase(ctx context.Context, task model.Task, ws string, tc model.TestCase) (model.CaseResult, error) {
-	if err := os.WriteFile(filepath.Join(ws, "input.txt"), []byte(tc.Input), 0o644); err != nil {
+	return j.runCaseWithSession(ctx, task, ws, tc, nil)
+}
+
+// runCaseWithSession 在指定沙箱会话（若无则兜底新建容器）中运行单个测试点。
+func (j *Judge) runCaseWithSession(ctx context.Context, task model.Task, ws string, tc model.TestCase, sess *sandbox.Session) (model.CaseResult, error) {
+	if err := os.WriteFile(filepath.Join(ws, "input.txt"), []byte(tc.Input), 0o666); err != nil {
 		return model.CaseResult{}, err
 	}
-	res, err := j.runner.Run(ctx, task.Language, ws, tc.Input, task.TimeLimitMs, task.MemoryLimitMb)
+	var (
+		res sandbox.RunResult
+		err error
+	)
+	if sess != nil {
+		res, err = sess.Run(ctx, tc.Input, task.TimeLimitMs)
+	} else {
+		res, err = j.runner.Run(ctx, task.Language, ws, tc.Input, task.TimeLimitMs, task.MemoryLimitMb)
+	}
 	if err != nil {
 		return model.CaseResult{}, err
 	}

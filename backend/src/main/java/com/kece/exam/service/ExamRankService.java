@@ -59,12 +59,14 @@ public class ExamRankService {
         }
 
         List<ExamQuestion> examQuestions = examQuestionMapper.findByExamId(examId);
+        Map<Long, ExamQuestion> eqMap = examQuestions.stream()
+                .collect(java.util.stream.Collectors.toMap(ExamQuestion::getId, q -> q, (a, b) -> a));
         int examTotalFullScore =
                 examQuestions.stream().mapToInt(q -> q.getScore() == null ? 0 : q.getScore()).sum();
 
         Map<Long, RankAgg> aggByUser = new LinkedHashMap<>();
         for (ExamSubmission row : answers) {
-            ExamQuestion eq = examQuestionMapper.findById(row.getExamQuestionId());
+            ExamQuestion eq = eqMap.get(row.getExamQuestionId());
             if (eq == null) {
                 continue;
             }
@@ -83,13 +85,13 @@ public class ExamRankService {
                 Submission s = latestCode.get(key(row.getUserId(), eq.getQuestionId()));
                 if (s != null) {
                     status = s.getStatus();
-                    score = scaleScore(s.getScore(), eq.getScore());
+                    score = scaleScore(s.getScore(), eq.getScore(), status);
                 }
-            } else if ("DB".equals(eq.getQuestionType())) {
+            } else if ("DB".equals(eq.getQuestionType()) || "DATABASE".equals(eq.getQuestionType())) {
                 DbSubmission s = latestDb.get(key(row.getUserId(), eq.getQuestionId()));
                 if (s != null) {
                     status = s.getStatus();
-                    score = scaleScore(s.getScore(), eq.getScore());
+                    score = scaleScore(s.getScore(), eq.getScore(), status);
                 }
             }
             if (isAccepted(status)) {
@@ -98,17 +100,70 @@ public class ExamRankService {
             agg.totalScore += score == null ? 0 : score;
         }
 
-        // ACM 罚时：代码/数据库题按 contest 内逐条计算（首 AC 分钟数 + 20×错误次数）
+        // 标准 ACM 罚时统计：仅对最终通过的题目累计罚时；未通过题目不计罚时；首 AC 后的提交不计罚时
         if (acm) {
-            Map<Long, RankAgg> byUser = new HashMap<>();
-            aggByUser.forEach((k, v) -> byUser.put(k, v));
+            record ContestAttempt(Long userId, Long questionId, java.time.LocalDateTime createdAt, String status) {}
+            List<ContestAttempt> allAttempts = new ArrayList<>();
             for (Submission s : codeSubs) {
-                RankAgg agg = byUser.computeIfAbsent(s.getUserId(), k -> new RankAgg());
-                accPenalty(agg, exam, s.getCreatedAt(), s.getStatus());
+                allAttempts.add(new ContestAttempt(s.getUserId(), s.getQuestionId(), s.getCreatedAt(), s.getStatus()));
             }
             for (DbSubmission s : dbSubs) {
-                RankAgg agg = byUser.computeIfAbsent(s.getUserId(), k -> new RankAgg());
-                accPenalty(agg, exam, s.getCreatedAt(), s.getStatus());
+                allAttempts.add(new ContestAttempt(s.getUserId(), s.getQuestionId(), s.getCreatedAt(), s.getStatus()));
+            }
+            allAttempts.sort(Comparator.comparing(ContestAttempt::createdAt, Comparator.nullsLast(Comparator.naturalOrder())));
+
+            Map<String, List<ContestAttempt>> attemptsByProblem = new HashMap<>();
+            for (ContestAttempt a : allAttempts) {
+                attemptsByProblem.computeIfAbsent(key(a.userId(), a.questionId()), k -> new ArrayList<>()).add(a);
+            }
+
+            for (Map.Entry<Long, RankAgg> entry : aggByUser.entrySet()) {
+                Long uid = entry.getKey();
+                RankAgg agg = entry.getValue();
+                long totalPenalty = 0;
+                int solvedCount = 0;
+
+                for (ExamQuestion eq : examQuestions) {
+                    if ("OBJECTIVE".equals(eq.getQuestionType())) {
+                        ExamSubmission sub = answers.stream()
+                                .filter(a -> a.getUserId().equals(uid) && a.getExamQuestionId().equals(eq.getId()))
+                                .findFirst().orElse(null);
+                        if (sub != null && isAccepted(sub.getStatus())) {
+                            solvedCount++;
+                            if (sub.getCreatedAt() != null && exam.getStartTime() != null) {
+                                totalPenalty += Math.max(0, Duration.between(exam.getStartTime(), sub.getCreatedAt()).toMinutes());
+                            }
+                        }
+                        continue;
+                    }
+
+                    List<ContestAttempt> attempts = attemptsByProblem.get(key(uid, eq.getQuestionId()));
+                    if (attempts == null || attempts.isEmpty()) {
+                        continue;
+                    }
+
+                    int wrongCount = 0;
+                    boolean ac = false;
+                    long acMinutes = 0;
+                    for (ContestAttempt att : attempts) {
+                        if (isAccepted(att.status())) {
+                            ac = true;
+                            if (att.createdAt() != null && exam.getStartTime() != null) {
+                                acMinutes = Math.max(0, Duration.between(exam.getStartTime(), att.createdAt()).toMinutes());
+                            }
+                            break;
+                        } else {
+                            wrongCount++;
+                        }
+                    }
+
+                    if (ac) {
+                        solvedCount++;
+                        totalPenalty += (acMinutes + (long) wrongCount * 20);
+                    }
+                }
+                agg.solved = solvedCount;
+                agg.penaltyMinutes = totalPenalty;
             }
         }
 
@@ -141,30 +196,18 @@ public class ExamRankService {
         return result;
     }
 
-    /** ACM 罚时累计：每道题在首 AC 前每次非 AC 记 20 分钟；AC 后不再累计。 */
-    private void accPenalty(
-            RankAgg agg, Exam exam, java.time.LocalDateTime createdAt, String status) {
-        if (status == null || createdAt == null) {
-            return;
-        }
-        if (isAccepted(status)) {
-            long minutes =
-                    Math.max(0, Duration.between(exam.getStartTime(), createdAt).toMinutes());
-            agg.penaltyMinutes += minutes;
-        } else {
-            agg.penaltyMinutes += 20;
-        }
-    }
-
     private boolean isAccepted(String status) {
         return "ACCEPTED".equals(status);
     }
 
-    private Integer scaleScore(Integer judgeScore, Integer fullScore) {
-        if (judgeScore == null || fullScore == null) {
-            return null;
+    private Integer scaleScore(Integer judgeScore, Integer fullScore, String status) {
+        if ("ACCEPTED".equals(status)) {
+            return fullScore != null ? fullScore : 0;
         }
-        return (int) Math.round((double) judgeScore * fullScore / 100.0);
+        if (judgeScore == null || fullScore == null || judgeScore <= 0) {
+            return 0;
+        }
+        return Math.min((int) Math.round((double) judgeScore * fullScore / 100.0), fullScore);
     }
 
     private String key(Long userId, Long questionId) {

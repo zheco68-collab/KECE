@@ -1,1465 +1,1244 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  examApi,
-  type ExamSessionQuestion,
-  type RankRow,
-  type SessionEnter,
-} from '@/api/exam'
-import { ApiError } from '@/api/request'
-import { databaseApi } from '@/api/database'
-import { submissionApi } from '@/api/submission'
-import CodeEditor from '@/components/CodeEditor.vue'
-import { useConfirm } from '@/composables/useConfirm'
+import { examApi, type SessionEnter, type ExamStudentInfo } from '@/api/exam'
 import { useToast } from '@/composables/useToast'
-import { renderMarkdown } from '@/utils/markdown'
-import { STATUS_ABBR, statusTone } from '@/utils/submission'
-import { copyToClipboard } from '@/utils/clipboard'
-import type { Submission, SubmissionStatus } from '@/types'
+import { useConfirm } from '@/composables/useConfirm'
 
 const route = useRoute()
 const router = useRouter()
+const { success, info, error: toastError } = useToast()
 const { confirm } = useConfirm()
-const { success, error, info } = useToast()
 
 const examId = computed(() => Number(route.params.id))
 const enter = ref<SessionEnter | null>(null)
 const loading = ref(true)
-const loadError = ref('')
+const submittingExam = ref(false)
 
-const currentIndex = ref(0)
-const remaining = ref(0)
-const submitting = ref(false)
-const switchCount = ref(0)
-let timer: ReturnType<typeof setInterval> | null = null
-
-/**
- * 每题作答状态
- */
-interface AnswerState {
-  saved: boolean
-  code: string
-  language: string
-  selected: string[]
-  fillText: string
-}
-const answers = reactive<Record<number, AnswerState>>({})
-const savedSet = ref(new Set<number>())
-
-/** ACM 单题实时评测状态（仅 ALGO/DB 使用） */
-interface JudgeState {
-  submitting: boolean
-  status: string | null
-  score: number | null
-}
-const judgeState = reactive<Record<number, JudgeState>>({})
-let pollTimer: ReturnType<typeof setInterval> | null = null
-
-const TERMINAL_STATUSES: SubmissionStatus[] = [
-  'ACCEPTED',
-  'WRONG_ANSWER',
-  'TIME_LIMIT_EXCEEDED',
-  'MEMORY_LIMIT_EXCEEDED',
-  'RUNTIME_ERROR',
-  'COMPILE_ERROR',
-  'SYSTEM_ERROR',
-]
-
-const currentQuestion = computed<ExamSessionQuestion | null>(() => {
-  const qs = enter.value?.questions
-  if (!qs || qs.length === 0) return null
-  return qs[currentIndex.value]
+const showStudentModal = ref(false)
+const savingStudentInfo = ref(false)
+const studentForm = ref<ExamStudentInfo>({
+  realName: '',
+  studentNo: '',
+  college: '',
+  major: '',
+  className: '',
 })
 
-const answerState = computed(() => {
-  const q = currentQuestion.value
-  if (!q) return null
-  return answers[q.id] ?? null
+let timer: number | null = null
+const remainingSec = ref<number | null>(null)
+
+const objectiveQuestions = computed(() => {
+  if (!enter.value) return []
+  return enter.value.questions.filter((q) => q.questionType === 'OBJECTIVE')
 })
 
-const currentJudge = computed<JudgeState | null>(() => {
-  const q = currentQuestion.value
-  if (!q) return null
-  return judgeState[q.id] ?? null
+const practicalQuestions = computed(() => {
+  if (!enter.value) return []
+  return enter.value.questions.filter((q) => q.questionType !== 'OBJECTIVE')
 })
 
-const countdownText = computed(() => {
-  const s = Math.max(remaining.value, 0)
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
-  return [h, m, sec].map((v) => String(v).padStart(2, '0')).join(':')
+const objectiveFullScore = computed(() => {
+  return objectiveQuestions.value.reduce((sum, q) => sum + (q.score || 0), 0)
 })
 
-function startTimer() {
-  if (timer) clearInterval(timer)
-  timer = setInterval(() => {
-    remaining.value -= 1
-    if (remaining.value <= 0) {
-      clearInterval(timer!)
-      timer = null
-      autoSubmit()
+const totalFullScore = computed(() => {
+  return enter.value?.questions.reduce((sum, q) => sum + (q.score || 0), 0) ?? 0
+})
+
+const objectiveAnsweredCount = computed(() => {
+  if (!enter.value?.myAnswers) return 0
+  return objectiveQuestions.value.filter((q) => {
+    const a = enter.value!.myAnswers?.[q.id]
+    return a && a.answerContent && a.answerContent.trim().length > 0
+  }).length
+})
+
+function getSavedAnswer(qId: number) {
+  const ans = enter.value?.myAnswers?.[qId]
+  if (!ans) return null
+  const q = enter.value?.questions.find((item) => item.id === qId)
+  if (!q) return ans
+
+  let score = ans.score
+  if (score != null) {
+    if (ans.status === 'ACCEPTED') {
+      score = q.score
+    } else if (score > q.score) {
+      // 防御：若沙箱或历史脏数据传递了原始百分制(0~100)，折算为快照分
+      score = Math.min(q.score, Math.round((score * q.score) / 100))
     }
-  }, 1000)
-}
-
-function optionLetter(index: number): string {
-  return String.fromCharCode(65 + index)
-}
-
-function optionText(option: string): string {
-  return option.replace(/^[A-Za-z][.、)）:：]\s*/, '')
-}
-
-const CODE_FILES: Record<string, string> = {
-  cpp: 'main.cpp',
-  java: 'Main.java',
-  python: 'main.py',
-  arkts: 'main.ets',
-}
-
-function algoAnswer(state: { code: string; language: string }): string {
-  const file = CODE_FILES[state.language] ?? 'main.cpp'
-  return JSON.stringify({ [file]: state.code })
-}
-
-function buildAnswer(q: ExamSessionQuestion, state: AnswerState): string {
-  if (q.questionType === 'ALGO') {
-    return algoAnswer(state)
   }
-  if (q.questionType === 'DB') {
-    return state.code
-  }
-  if (q.objectiveType === 'FILL') {
-    return state.fillText
-  }
-  return state.selected.join(',')
-}
 
-function buildLanguage(q: ExamSessionQuestion, state: AnswerState): string | undefined {
-  return q.questionType === 'ALGO' ? state.language : undefined
-}
-
-async function copySchema() {
-  if (!currentQuestion.value?.schemaSql) return
-  const ok = await copyToClipboard(currentQuestion.value.schemaSql)
-  if (ok) {
-    success('建表 DDL 已复制到剪贴板')
-  } else {
-    error('复制失败，请手动选取')
+  return {
+    ...ans,
+    score,
   }
 }
 
-async function saveCurrent(silent = false) {
-  const q = currentQuestion.value
-  const state = answerState.value
-  if (!q || !state) return
+const acSolvedCount = computed(() => {
+  if (!enter.value?.questions) return 0
+  return practicalQuestions.value.filter((q) => {
+    const a = getSavedAnswer(q.id)
+    return a && a.status === 'ACCEPTED'
+  }).length
+})
+
+const myTotalScore = computed(() => {
+  if (!enter.value?.questions) return 0
+  let total = 0
+  for (const q of enter.value.questions) {
+    const a = getSavedAnswer(q.id)
+    if (a && a.score != null) {
+      total += a.score
+    }
+  }
+  return total
+})
+
+const formattedRemaining = computed(() => {
+  if (enter.value?.status === 'ENDED' || (remainingSec.value !== null && remainingSec.value <= 0)) {
+    return '00:00 (已截止)'
+  }
+  if (remainingSec.value === null) return '--:--'
+  const h = Math.floor(remainingSec.value / 3600)
+  const m = Math.floor((remainingSec.value % 3600) / 60)
+  const s = remainingSec.value % 60
+  if (h > 0) {
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+})
+
+async function fetchEnter() {
+  loading.value = true
   try {
-    await examApi.saveAnswer(examId.value, {
-      examQuestionId: q.id,
-      answer: buildAnswer(q, state),
-      language: buildLanguage(q, state),
-    })
-    state.saved = true
-    savedSet.value.add(q.id)
-    if (!silent) {
-      success(`第 ${currentIndex.value + 1} 题作答已保存`)
+    const res = await examApi.enter(examId.value)
+    enter.value = res
+    if (res.status === 'ENDED') {
+      remainingSec.value = 0
+    } else if (res.remainingSeconds !== undefined && res.remainingSeconds !== null) {
+      remainingSec.value = res.remainingSeconds
     }
-  } catch (e) {
-    state.saved = false
-    if (!silent) {
-      error(e instanceof ApiError ? e.message : '保存失败')
+    if (res.studentInfo) {
+      studentForm.value = {
+        realName: res.studentInfo.realName || '',
+        studentNo: res.studentInfo.studentNo || '',
+        college: res.studentInfo.college || '',
+        major: res.studentInfo.major || '',
+        className: res.studentInfo.className || '',
+      }
     }
+    if (res.requireStudentInfo && !res.hasFilledStudentInfo) {
+      showStudentModal.value = true
+    }
+  } catch (e: any) {
+    const msg = e instanceof Error ? e.message : '加载考试失败'
+    if (msg.includes('已交卷')) {
+      info('您已交卷，正在前往成绩战报…')
+      router.replace(`/exams/${examId.value}/result`)
+      return
+    }
+    toastError(msg)
+  } finally {
+    loading.value = false
   }
 }
 
-function stopPoll() {
-  if (pollTimer !== null) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
-
-async function submitCurrent() {
-  const q = currentQuestion.value
-  const state = answerState.value
-  if (!q || !state) return
-
-  const isEmpty =
-    q.questionType === 'ALGO' || q.questionType === 'DB'
-      ? state.code.trim() === ''
-      : q.objectiveType === 'FILL'
-        ? state.fillText.trim() === ''
-        : state.selected.length === 0
-
-  if (isEmpty) {
-    error('请先编写作答内容再提交评测')
+async function saveStudentInfoAction() {
+  if (!studentForm.value.realName || !studentForm.value.realName.trim()) {
+    toastError('请填写您的真实姓名')
     return
   }
-
-  if (judgeState[q.id]?.submitting) return
-  if (!judgeState[q.id]) judgeState[q.id] = { submitting: false, status: null, score: null }
-  const st = judgeState[q.id]
-  st.submitting = true
-  st.status = null
-  st.score = null
-
+  if (!studentForm.value.studentNo || !studentForm.value.studentNo.trim()) {
+    toastError('请填写您的学号')
+    return
+  }
+  savingStudentInfo.value = true
   try {
-    await examApi.saveAnswer(examId.value, {
-      examQuestionId: q.id,
-      answer: buildAnswer(q, state),
-      language: buildLanguage(q, state),
-    })
-    state.saved = true
-    savedSet.value.add(q.id)
-
-    const res = await examApi.submitQuestion(examId.value, q.id)
-    info('已提交沙箱，评测中…')
-    startPoll(q.id, res.submissionId, res.questionType)
+    const res = await examApi.saveStudentInfo(examId.value, studentForm.value)
+    if (enter.value) {
+      enter.value.studentInfo = res
+      enter.value.hasFilledStudentInfo = true
+    }
+    showStudentModal.value = false
+    success('考生信息核验成功，祝您考试取得优异成绩！')
   } catch (e) {
-    st.submitting = false
-    error(e instanceof ApiError ? e.message : '提交失败')
+    toastError(e instanceof Error ? e.message : '保存考生信息失败')
+  } finally {
+    savingStudentInfo.value = false
   }
 }
 
-function startPoll(questionId: number, submissionId: number, type: 'ALGO' | 'DB') {
-  stopPoll()
-  pollTimer = setInterval(async () => {
-    try {
-      const s: Submission =
-        type === 'ALGO'
-          ? await submissionApi.get(submissionId)
-          : await databaseApi.getSubmission(submissionId)
-      const st = judgeState[questionId]
-      if (st) {
-        st.status = s.status
-        st.score = s.result?.score ?? null
+function startCountdown() {
+  timer = window.setInterval(() => {
+    if (remainingSec.value !== null && remainingSec.value > 0) {
+      remainingSec.value--
+      if (remainingSec.value === 0 && enter.value) {
+        enter.value.status = 'ENDED'
+        info('考试时间已截止')
       }
-      if (TERMINAL_STATUSES.includes(s.status)) {
-        stopPoll()
-        if (st) st.submitting = false
-        if (s.status === 'ACCEPTED') {
-          success(`第 ${currentIndex.value + 1} 题评测通过 (AC)`)
-        } else {
-          info(`第 ${currentIndex.value + 1} 题评测未通过 (${STATUS_ABBR[s.status] || s.status})，可修改重新提交`)
-        }
-      }
-    } catch {
-      stopPoll()
-      if (judgeState[questionId]) judgeState[questionId].submitting = false
     }
   }, 1000)
 }
 
-watch(currentIndex, (_newIdx, oldIdx) => {
-  stopPoll()
-  // 切换题目时静默暂存上一题
-  const prevQ = enter.value?.questions?.[oldIdx]
-  const prevState = prevQ ? answers[prevQ.id] : null
-  if (prevQ && prevState) {
-    examApi
-      .saveAnswer(examId.value, {
-        examQuestionId: prevQ.id,
-        answer: buildAnswer(prevQ, prevState),
-        language: buildLanguage(prevQ, prevState),
-      })
-      .then(() => {
-        prevState.saved = true
-        savedSet.value.add(prevQ.id)
-      })
-      .catch(() => {
-        /* 静默保存失败 */
-      })
-  }
-})
+async function handleSubmitExam() {
+  const ok = await confirm({
+    title: '确认提交整场考试',
+    message: '交卷后本次考试的所有作答将被锁定并归档评测，确定现在交卷吗？',
+    confirmText: '确认交卷',
+    cancelText: '继续作答',
+  })
+  if (!ok) return
 
-async function doSubmit() {
-  if (submitting.value) return
-  submitting.value = true
+  submittingExam.value = true
   try {
-    const q = currentQuestion.value
-    const state = answerState.value
-    if (q && state) {
-      try {
-        await examApi.saveAnswer(examId.value, {
-          examQuestionId: q.id,
-          answer: buildAnswer(q, state),
-          language: buildLanguage(q, state),
-        })
-      } catch {
-        /* 保存失败不阻塞交卷 */
-      }
-    }
-    const res = await examApi.submit(examId.value)
-    success(`交卷成功：${res.graded} 题已判分，${res.queued} 题后台评测中`)
+    await examApi.submit(examId.value)
+    success('交卷成功！正在为您生成成绩战报…')
     router.push(`/exams/${examId.value}/result`)
   } catch (e) {
-    error(e instanceof ApiError ? e.message : '交卷失败')
+    toastError(e instanceof Error ? e.message : '交卷失败')
   } finally {
-    submitting.value = false
-  }
-}
-
-async function submitWithConfirm() {
-  const unansweredCount = (enter.value?.questions?.length ?? 0) - savedSet.value.size
-  const extraTip =
-    unansweredCount > 0
-      ? `目前还有 ${unansweredCount} 道题未保存作答。`
-      : '所有题目均已完成作答保存。'
-
-  const ok = await confirm({
-    title: '确认提交全卷',
-    message: `${extraTip}交卷后将锁定作答并生成成绩战报，确定现在交卷吗？`,
-    confirmText: '确认交卷',
-    cancelText: '继续答题',
-  })
-  if (ok) await doSubmit()
-}
-
-async function autoSubmit() {
-  if (submitting.value) return
-  info('考试倒计时已截止，系统自动锁定并交卷')
-  await doSubmit()
-}
-
-// ==================== 切屏反作弊监听 ====================
-async function handleVisibilityChange() {
-  if (document.hidden && !submitting.value) {
-    try {
-      const res = await examApi.reportSwitch(examId.value, 1)
-      switchCount.value = res.count
-      info(`[监控提醒] 检测到离开考试界面，当前切屏已累计记录 ${switchCount.value} 次`)
-    } catch {
-      /* 忽略上报异常 */
-    }
-  }
-}
-
-// ==================== 实时排名 ====================
-const rankingVisible = ref(false)
-const ranking = ref<RankRow[]>([])
-const rankingLoading = ref(false)
-const rankRows = computed(() => ranking.value.map((row, index) => ({ ...row, rank: index + 1 })))
-let rankTimer: ReturnType<typeof setInterval> | null = null
-
-async function loadRanking() {
-  rankingLoading.value = true
-  try {
-    ranking.value = await examApi.ranking(examId.value)
-  } catch (e) {
-    error(e instanceof ApiError ? e.message : '排名加载失败')
-  } finally {
-    rankingLoading.value = false
-  }
-}
-
-function openRanking() {
-  rankingVisible.value = true
-  loadRanking()
-  if (rankTimer) clearInterval(rankTimer)
-  rankTimer = setInterval(loadRanking, 10000)
-}
-
-function closeRanking() {
-  rankingVisible.value = false
-  if (rankTimer) {
-    clearInterval(rankTimer)
-    rankTimer = null
+    submittingExam.value = false
   }
 }
 
 onMounted(async () => {
-  document.addEventListener('visibilitychange', handleVisibilityChange)
-  try {
-    enter.value = await examApi.enter(examId.value)
-    for (const q of enter.value.questions) {
-      answers[q.id] = {
-        saved: false,
-        code: q.questionType === 'DB' ? (q.schemaSql ? '-- 编写 SQL 语句\n' : '') : '',
-        language: 'cpp',
-        selected: [],
-        fillText: '',
-      }
-    }
-    remaining.value = enter.value.remainingSeconds
-    startTimer()
-
-    // 拉取本人已有切屏次数
-    try {
-      const sw = await examApi.mySwitchCount(examId.value)
-      switchCount.value = sw.count
-    } catch {
-      /* 忽略 */
-    }
-  } catch (e) {
-    loadError.value = e instanceof ApiError ? e.message : '进入考场失败'
-  } finally {
-    loading.value = false
-  }
+  await fetchEnter()
+  startCountdown()
 })
 
 onBeforeUnmount(() => {
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
   if (timer) clearInterval(timer)
-  stopPoll()
-  if (rankTimer) clearInterval(rankTimer)
 })
 </script>
 
 <template>
-  <div class="exam-station">
-    <!-- 加载与异常状态 -->
-    <div v-if="loading" class="state-full card">
+  <div class="practice-detail-page container">
+    <!-- 加载中 -->
+    <div v-if="loading" class="state-card card">
       <div class="loading-spinner"></div>
-      <p class="muted">正在初始化全真隔离考场环境并下载题目快照…</p>
-    </div>
-
-    <div v-else-if="loadError" class="state-full card">
-      <div class="error-title">进入考场受限</div>
-      <p class="error-msg">{{ loadError }}</p>
-      <div style="display: flex; gap: 12px; justify-content: center;">
-        <button class="btn btn-outline" @click="router.push('/exams')">返回考试大厅</button>
-        <button class="btn btn-primary" @click="router.push(`/exams/${examId}/result`)">查看考试战报 →</button>
-      </div>
+      <p class="muted">正在加载试卷题目与作答档案…</p>
     </div>
 
     <template v-else-if="enter">
-      <!-- 顶部控制仪表盘 (Header Dashboard) -->
-      <header class="dash-bar card">
-        <div class="dash-left">
-          <div class="exam-title-group">
-            <span class="badge mode-tag" :class="enter.mode === 'ACM' ? 'mode-acm' : 'mode-oi'">
-              {{ enter.mode === 'ACM' ? 'ACM 赛制' : 'OI 赛制' }}
+      <!-- 顶部信息栏 -->
+      <header class="detail-header card">
+        <div class="header-top">
+          <button class="btn-back" @click="router.push('/exams')">
+            ← 返回考试大厅
+          </button>
+          <div class="header-actions">
+            <span class="status-pill" :class="enter.status.toLowerCase()">
+              {{ enter.status === 'ACTIVE' || enter.status === 'ONGOING' ? '● 进行中' : '已结束' }}
             </span>
-            <h1 class="exam-station-title">{{ enter.examTitle }}</h1>
-          </div>
-
-          <div class="progress-pill">
-            <span class="pill-k">答题进度</span>
-            <span class="pill-v mono">{{ savedSet.size }} / {{ enter.questions.length }}</span>
-          </div>
-
-          <div v-if="switchCount > 0" class="switch-pill" title="切屏监控已启用">
-            <span class="switch-warn-dot"></span>
-            <span>切屏 {{ switchCount }} 次</span>
+            <span class="code-pill">赛制: <strong>{{ enter.mode }}</strong></span>
           </div>
         </div>
 
-        <div class="dash-right">
-          <!-- 等宽数码倒计时时钟 -->
-          <div class="clock-box" :class="{ alert: remaining < 300 }">
-            <span class="clock-label">剩余作答时间</span>
-            <span class="clock-digits mono">{{ countdownText }}</span>
-          </div>
-
-          <button class="btn btn-outline btn-rank" type="button" @click="openRanking">
-            <svg class="rank-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 20V10" />
-              <path d="M12 20V4" />
-              <path d="M6 20v-6" />
-            </svg>
-            <span>实时排名</span>
-          </button>
-
-          <button
-            class="btn btn-primary btn-submit-exam"
-            :disabled="submitting"
-            type="button"
-            @click="submitWithConfirm"
+        <div class="title-row">
+          <h1 class="practice-title">{{ enter.examTitle }}</h1>
+          <div
+            v-if="enter.durationMinutes > 0"
+            class="countdown-badge"
+            :class="{
+              urgent: (remainingSec ?? 100) < 300 && enter.status !== 'ENDED',
+              ended: enter.status === 'ENDED'
+            }"
           >
-            {{ submitting ? '交卷归档中…' : '交卷' }}
+            <span class="cd-label">
+              {{ enter.status === 'ENDED' ? '作答状态' : '剩余作答时间' }}
+            </span>
+            <span class="cd-time">
+              {{ enter.status === 'ENDED' ? '已截止收卷' : formattedRemaining }}
+            </span>
+          </div>
+        </div>
+
+        <!-- 考生信息归档密封条 -->
+        <div v-if="enter.studentInfo" class="student-seal-bar">
+          <div class="seal-pill">
+            <span class="seal-icon">🪪</span>
+            <span class="seal-title">考生归档信息（已加盖密封线）</span>
+          </div>
+          <div class="seal-info-items">
+            <span class="s-field"><strong>姓名:</strong> {{ enter.studentInfo.realName }}</span>
+            <span class="s-field"><strong>学号:</strong> {{ enter.studentInfo.studentNo }}</span>
+            <span v-if="enter.studentInfo.college" class="s-field"><strong>院系:</strong> {{ enter.studentInfo.college }}</span>
+            <span v-if="enter.studentInfo.major" class="s-field"><strong>专业:</strong> {{ enter.studentInfo.major }}</span>
+            <span v-if="enter.studentInfo.className" class="s-field"><strong>班级:</strong> {{ enter.studentInfo.className }}</span>
+          </div>
+          <button
+            v-if="enter.status !== 'ENDED'"
+            class="btn-edit-student"
+            @click="showStudentModal = true"
+          >
+            修改信息
           </button>
+        </div>
+        <div v-else-if="enter.requireStudentInfo" class="student-seal-bar unverified">
+          <div class="seal-pill warn">
+            <span class="seal-icon">⚠️</span>
+            <span class="seal-title">尚未登记考生信息</span>
+          </div>
+          <span class="warn-msg">本场考试要求实名归档，请在作答前填报核验</span>
+          <button class="btn-edit-student primary" @click="showStudentModal = true">
+            立即登记考生信息 →
+          </button>
+        </div>
+
+        <!-- Bento 指标方块 -->
+        <div class="bento-strip">
+          <div class="bento-item">
+            <span class="b-label">考核模式</span>
+            <span class="b-value">{{ enter.mode }} 赛制</span>
+          </div>
+          <div class="bento-item">
+            <span class="b-label">试卷总分值</span>
+            <span class="b-value">{{ totalFullScore }} 分</span>
+          </div>
+          <div class="bento-item">
+            <span class="b-label">我的当前得分</span>
+            <span class="b-value highlight">{{ myTotalScore }} 分</span>
+          </div>
+          <div class="bento-item">
+            <span class="b-label">实战 AC 通过</span>
+            <span class="b-value success-text">{{ acSolvedCount }} 题</span>
+          </div>
+          <div class="bento-item action-item">
+            <button
+              class="btn btn-submit-practice"
+              :disabled="submittingExam || enter.status === 'ENDED'"
+              @click="handleSubmitExam"
+            >
+              {{ submittingExam ? '交卷中…' : '提交考试卷 ✓' }}
+            </button>
+          </div>
         </div>
       </header>
 
-      <!-- 考场核心交互工作区：左侧题号方块导轨 + 右侧双栏开阔分屏 -->
-      <div class="station-body">
-        <!-- -------------------------------------------------------------
-             用户的核心标志性设计：直角方块题号导轨（完全保留并强化设计感）
-             ------------------------------------------------------------- -->
-        <aside class="nav-rail card">
-          <div class="nav-rail-head">
-            <span class="rail-title">考卷试题矩阵</span>
-            <span class="rail-count mono">{{ enter.questions.length }} 题</span>
+      <!-- 板块 1: 客观题集中答卷入口 -->
+      <section v-if="objectiveQuestions.length > 0" class="objective-section card">
+        <div class="obj-card-left">
+          <div class="obj-icon-square">OBJ</div>
+          <div class="obj-text-wrap">
+            <div class="obj-badge-row">
+              <span class="obj-tag">客观题综合卷</span>
+              <span class="obj-score-tag">总分值: {{ objectiveFullScore }} 分</span>
+            </div>
+            <h2 class="obj-title">客观题集中答题区（共 {{ objectiveQuestions.length }} 道）</h2>
+            <p class="obj-desc">
+              本场所有单选、多选与判断/填空题已汇聚在同一答卷中，支持即刻集中作答与自动保存。
+            </p>
           </div>
-
-          <div class="q-squares-list">
-            <button
-              v-for="(q, i) in enter.questions"
-              :key="q.id"
-              class="q-nav-item"
-              :class="{
-                active: i === currentIndex,
-                saved: savedSet.has(q.id),
-                ac: judgeState[q.id]?.status === 'ACCEPTED',
-                wa: judgeState[q.id]?.status && judgeState[q.id]?.status !== 'ACCEPTED',
-              }"
-              @click="currentIndex = i"
-            >
-              <!-- 核心直角方块题号标识 (严格 0-radius) -->
-              <div class="q-square-block">
-                <span class="sq-no">{{ i + 1 < 10 ? `0${i + 1}` : i + 1 }}</span>
-                <span v-if="judgeState[q.id]?.status === 'ACCEPTED'" class="sq-status-icon">✓</span>
-              </div>
-
-              <div class="q-item-info">
-                <div class="q-item-top">
-                  <span class="q-type-label">
-                    {{
-                      q.questionType === 'ALGO'
-                        ? '编程'
-                        : q.questionType === 'DB'
-                          ? 'SQL'
-                          : q.objectiveType === 'FILL'
-                            ? '填空'
-                            : '选择'
-                    }}
-                  </span>
-                  <span class="q-score-label mono">{{ q.score }}分</span>
-                </div>
-                <span class="q-item-title">{{ q.title }}</span>
-              </div>
-            </button>
+        </div>
+        <div class="obj-card-right">
+          <div class="obj-progress-info">
+            <span class="progress-txt">完成进度: {{ objectiveAnsweredCount }} / {{ objectiveQuestions.length }} 题</span>
           </div>
-        </aside>
+          <button
+            class="btn btn-enter-obj"
+            :class="{ 'btn-view-mode': enter.status === 'ENDED' }"
+            @click="router.push(`/exams/${examId}/objective`)"
+          >
+            {{
+              enter.status === 'ENDED'
+                ? '查看客观题答卷 →'
+                : objectiveAnsweredCount > 0
+                  ? '查看或修改客观题 →'
+                  : '进入集中答卷 →'
+            }}
+          </button>
+        </div>
+      </section>
 
-        <!-- 答题工作台：双栏开阔联动分屏 -->
-        <main v-if="currentQuestion" class="workspace card">
-          <div class="workspace-grid">
-            <!-- 左栏：题面要求与规格 -->
-            <section class="left-pane">
-              <div class="pane-head">
-                <div class="pane-q-title-row">
-                  <span class="q-cur-no">试题 #{{ currentIndex + 1 }}</span>
-                  <h2 class="pane-title">{{ currentQuestion.title }}</h2>
-                </div>
-
-                <div class="pane-tags">
-                  <span class="badge" :class="`type-${currentQuestion.questionType.toLowerCase()}`">
-                    {{
-                      currentQuestion.questionType === 'ALGO'
-                        ? '编程算法题'
-                        : currentQuestion.questionType === 'DB'
-                          ? '数据库 SQL'
-                          : currentQuestion.objectiveType === 'FILL'
-                            ? '客观填空题'
-                            : '客观选择题'
-                    }}
-                  </span>
-                  <span class="badge score-badge mono">满分 {{ currentQuestion.score }} 分</span>
-                  <span v-if="currentQuestion.timeLimitMs" class="spec-text mono">
-                    {{ currentQuestion.timeLimitMs }} ms · {{ currentQuestion.memoryLimitMb }} MB
-                  </span>
-                </div>
-              </div>
-
-              <!-- 题面 Markdown 渲染正文 -->
-              <div class="pane-content prose" v-html="renderMarkdown(currentQuestion.content ?? '')"></div>
-
-              <!-- 数据库表结构 DDL 参考抽屉 -->
-              <div v-if="currentQuestion.questionType === 'DB' && currentQuestion.schemaSql" class="schema-box">
-                <div class="schema-box-head">
-                  <span class="schema-title">数据库 Schema 表结构 (参考)</span>
-                  <button class="btn-copy-schema" @click="copySchema">复制 DDL</button>
-                </div>
-                <pre class="schema-code">{{ currentQuestion.schemaSql }}</pre>
-              </div>
-            </section>
-
-            <!-- 右栏：作答与评测执行区 -->
-            <section class="right-pane">
-              <!-- 编程题作答区 -->
-              <template v-if="currentQuestion.questionType === 'ALGO' && answerState">
-                <div class="editor-ctrl-bar">
-                  <div class="editor-ctrl-left">
-                    <span class="ctrl-label">作答语言</span>
-                    <select v-model="answerState.language" class="select-lang">
-                      <option value="cpp">C++ 17</option>
-                      <option value="java">Java 17</option>
-                      <option value="python">Python 3.10</option>
-                      <option value="arkts">ArkTS</option>
-                    </select>
-                  </div>
-                  <div class="editor-ctrl-right">
-                    <span class="shortcut-tip">Ctrl+Enter 提交评测</span>
-                  </div>
-                </div>
-
-                <div class="editor-wrapper">
-                  <CodeEditor v-model="answerState.code" :language="answerState.language" />
-                </div>
-              </template>
-
-              <!-- 数据库 SQL 作答区 -->
-              <template v-else-if="currentQuestion.questionType === 'DB' && answerState">
-                <div class="editor-ctrl-bar">
-                  <div class="editor-ctrl-left">
-                    <span class="ctrl-label">SQL 方言</span>
-                    <span class="dialect-pill">MySQL 8.0</span>
-                  </div>
-                  <div class="editor-ctrl-right">
-                    <span class="shortcut-tip">单条 SQL 语句</span>
-                  </div>
-                </div>
-
-                <div class="editor-wrapper">
-                  <CodeEditor v-model="answerState.code" language="mysql" />
-                </div>
-              </template>
-
-              <!-- 客观题作答区 -->
-              <template v-else-if="currentQuestion.questionType === 'OBJECTIVE' && answerState">
-                <div class="objective-pane">
-                  <div class="obj-hint-bar">
-                    <span v-if="currentQuestion.objectiveType === 'SINGLE'">单选题 · 请选取唯一正确选项</span>
-                    <span v-else-if="currentQuestion.objectiveType === 'MULTIPLE'">多选题 · 请选取所有符合条件的选项</span>
-                    <span v-else>填空题 · 请在输入框中填入精准答案文本</span>
-                  </div>
-
-                  <!-- 填空题输入 -->
-                  <div v-if="currentQuestion.objectiveType === 'FILL'" class="fill-box">
-                    <label class="fill-label">考生作答内容：</label>
-                    <input
-                      v-model="answerState.fillText"
-                      class="input fill-input"
-                      type="text"
-                      placeholder="在此输入你的填空答案…"
-                      @keyup.enter="saveCurrent(false)"
-                    />
-                  </div>
-
-                  <!-- 选择题选项列表（直角方块字母 A/B/C/D） -->
-                  <div v-else class="options-container">
-                    <label
-                      v-for="(opt, i) in currentQuestion.options ?? []"
-                      :key="i"
-                      class="opt-card"
-                      :class="{ selected: answerState.selected.includes(optionLetter(i)) }"
-                    >
-                      <!-- 单选 radio -->
-                      <input
-                        v-if="currentQuestion.objectiveType === 'SINGLE'"
-                        type="radio"
-                        :name="`exam-q-${currentQuestion.id}`"
-                        class="opt-native-input"
-                        :checked="answerState.selected[0] === optionLetter(i)"
-                        @change="answerState.selected = [optionLetter(i)]; saveCurrent(true)"
-                      />
-                      <!-- 多选 checkbox -->
-                      <input
-                        v-else
-                        v-model="answerState.selected"
-                        type="checkbox"
-                        class="opt-native-input"
-                        :value="optionLetter(i)"
-                        @change="saveCurrent(true)"
-                      />
-
-                      <!-- 直角选项字母大方块 -->
-                      <span class="opt-square-letter mono">{{ optionLetter(i) }}</span>
-                      <span class="opt-desc">{{ optionText(opt) }}</span>
-                    </label>
-                  </div>
-                </div>
-              </template>
-
-              <!-- 右栏底部统一操作栏 -->
-              <footer class="pane-footer">
-                <div class="footer-left">
-                  <!-- ACM 实时提交按钮与状态 -->
-                  <template
-                    v-if="
-                      enter.mode === 'ACM' &&
-                      (currentQuestion.questionType === 'ALGO' || currentQuestion.questionType === 'DB')
-                    "
-                  >
-                    <button
-                      class="btn btn-primary btn-judge"
-                      :disabled="currentJudge?.submitting"
-                      type="button"
-                      @click="submitCurrent"
-                    >
-                      <span>{{ currentJudge?.submitting ? '沙箱评测中…' : '提交本题评测' }}</span>
-                    </button>
-
-                    <div
-                      v-if="currentJudge?.status"
-                      class="judge-status-block"
-                      :class="statusTone(currentJudge.status as SubmissionStatus)"
-                    >
-                      <span class="status-name mono">
-                        {{ STATUS_ABBR[currentJudge.status as SubmissionStatus] ?? currentJudge.status }}
-                      </span>
-                      <span v-if="currentJudge.score != null" class="status-score mono">
-                        {{ currentJudge.score }}分
-                      </span>
-                    </div>
-                  </template>
-
-                  <!-- 保存作答按钮 -->
-                  <button
-                    class="btn btn-outline btn-save"
-                    type="button"
-                    @click="saveCurrent(false)"
-                  >
-                    <span>{{ answerState?.saved ? '✓ 已保存作答' : '保存本题作答' }}</span>
-                  </button>
-                </div>
-
-                <div class="footer-right">
-                  <button
-                    class="btn btn-ghost btn-sm"
-                    :disabled="currentIndex <= 0"
-                    type="button"
-                    @click="currentIndex--"
-                  >
-                    ← 上一题
-                  </button>
-                  <button
-                    class="btn btn-ghost btn-sm"
-                    :disabled="currentIndex >= enter.questions.length - 1"
-                    type="button"
-                    @click="currentIndex++"
-                  >
-                    下一题 →
-                  </button>
-                </div>
-              </footer>
-            </section>
+      <!-- 板块 2: 编程与 SQL 实战题目列表 -->
+      <section v-if="practicalQuestions.length > 0" class="practical-section">
+        <div class="section-header">
+          <div class="sec-left">
+            <h2 class="section-title">上机实操试题清单</h2>
+            <span class="sec-count">共 {{ practicalQuestions.length }} 题</span>
           </div>
-        </main>
-      </div>
+          <span class="sec-hint">点击题目即可进入标准做题与评测工作台</span>
+        </div>
 
-      <!-- 实时排名弹窗 -->
-      <Teleport to="body">
-        <div v-if="rankingVisible" class="rank-overlay" @click.self="closeRanking">
-          <div class="rank-modal card" role="dialog" aria-modal="true">
-            <div class="rank-head">
-              <div class="rank-head-title">
-                <h3 class="rank-modal-h">ACM 全场实时排行榜</h3>
-                <span class="rank-refresh-tag">每 10 秒自动轮询</span>
-              </div>
-              <button class="btn btn-ghost btn-sm" type="button" @click="closeRanking">关闭 [ESC]</button>
+        <div class="practical-list">
+          <div
+            v-for="(q, idx) in practicalQuestions"
+            :key="q.id"
+            class="practical-item card"
+            :class="{
+              solved: getSavedAnswer(q.id)?.status === 'ACCEPTED',
+              partial: (getSavedAnswer(q.id)?.score ?? 0) > 0 && getSavedAnswer(q.id)?.status !== 'ACCEPTED'
+            }"
+          >
+            <div class="status-col">
+              <div v-if="getSavedAnswer(q.id)?.status === 'ACCEPTED'" class="status-circle solved" title="已满分通过">✓</div>
+              <div v-else-if="(getSavedAnswer(q.id)?.score ?? 0) > 0" class="status-circle partial" title="获得部分分">◐</div>
+              <div v-else-if="getSavedAnswer(q.id)?.status === 'WRONG_ANSWER'" class="status-circle failed" title="未完全通过">✕</div>
+              <div v-else class="status-circle unsolved" title="未解答">○</div>
             </div>
 
-            <div class="rank-body">
-              <p v-if="rankingLoading && ranking.length === 0" class="muted loading-text">拉取天梯排名中…</p>
-              <table v-else class="rank-table">
-                <thead>
-                  <tr>
-                    <th class="th-rank">名次</th>
-                    <th>考生</th>
-                    <th class="th-num">通过 (AC)</th>
-                    <th class="th-num">罚时 (分)</th>
-                    <th class="th-num">综合得分</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in rankRows" :key="row.userId" :class="{ 'top-three': row.rank <= 3 }">
-                    <td class="td-rank">
-                      <span class="rank-badge-square mono" :class="`rank-${row.rank}`">
-                        {{ row.rank }}
-                      </span>
-                    </td>
-                    <td class="td-user font-bold">{{ row.username }}</td>
-                    <td class="td-num mono font-bold text-success">{{ row.solved }} 题</td>
-                    <td class="td-num mono">{{ row.penaltyMinutes }}</td>
-                    <td class="td-num mono score-bold">{{ row.totalScore }} / {{ row.fullScore }}</td>
-                  </tr>
-                  <tr v-if="rankRows.length === 0">
-                    <td colspan="5" class="empty-rank muted">暂无考生作答数据</td>
-                  </tr>
-                </tbody>
-              </table>
+            <!-- 题号与标题 -->
+            <div class="info-col">
+              <div class="title-top">
+                <span class="q-number">#{{ idx + 1 }}</span>
+                <span class="q-type-badge" :class="q.questionType.toLowerCase()">
+                  {{ q.questionType === 'ALGO' ? '算法编程' : '数据库 SQL' }}
+                </span>
+                <span class="q-score-badge">{{ q.score }} 分</span>
+              </div>
+              <h3
+                class="q-title"
+                @click="
+                  q.questionType === 'ALGO'
+                    ? router.push(`/exams/${examId}/question/${q.id}`)
+                    : router.push(`/exams/${examId}/db-question/${q.id}`)
+                "
+              >
+                {{ q.title }}
+              </h3>
+              <div class="q-meta">
+                <span v-if="q.questionType === 'ALGO'" class="meta-spec">
+                  规格: {{ q.timeLimitMs || 1000 }}ms / {{ q.memoryLimitMb || 256 }}MB
+                </span>
+                <span v-else class="meta-spec">
+                  引擎: MySQL 8.0 标准环境
+                </span>
+                <span v-if="(getSavedAnswer(q.id)?.score ?? 0) > 0" class="meta-user-score" :class="{ 'is-partial': getSavedAnswer(q.id)?.status !== 'ACCEPTED' }">
+                  本题得分: {{ getSavedAnswer(q.id)?.score }} / {{ q.score }} 分 ({{ getSavedAnswer(q.id)?.status === 'ACCEPTED' ? '已满分' : '已得部分分' }})
+                </span>
+              </div>
+            </div>
+
+            <!-- CTA 按钮 -->
+            <div class="action-col">
+              <button
+                class="btn btn-start"
+                :class="{
+                  'btn-view-mode': enter.status === 'ENDED',
+                  'btn-partial': (getSavedAnswer(q.id)?.score ?? 0) > 0 && getSavedAnswer(q.id)?.status !== 'ACCEPTED'
+                }"
+                @click="
+                  q.questionType === 'ALGO'
+                    ? router.push(`/exams/${examId}/question/${q.id}`)
+                    : router.push(`/exams/${examId}/db-question/${q.id}`)
+                "
+              >
+                {{
+                  enter.status === 'ENDED'
+                    ? (getSavedAnswer(q.id)?.status === 'ACCEPTED' ? '查看测评结果 →' : ((getSavedAnswer(q.id)?.score ?? 0) > 0 ? '查看部分分结果 →' : '查看题目 →'))
+                    : (getSavedAnswer(q.id)?.status === 'ACCEPTED' ? '重新作答 →' : ((getSavedAnswer(q.id)?.score ?? 0) > 0 ? '继续冲满分 →' : '开始做题 →'))
+                }}
+              </button>
             </div>
           </div>
         </div>
-      </Teleport>
+      </section>
     </template>
+
+    <!-- 考生信息登记核验弹窗（根据教师设置要求填写） -->
+    <div v-if="showStudentModal" class="modal-backdrop">
+      <div class="modal-box card">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span class="modal-tag">考生身份核验</span>
+            <h3 class="modal-title">期末标准化考试考生档案登记</h3>
+          </div>
+        </div>
+        <p class="modal-desc">
+          本场考试已开启标准化实名阅卷规范。作答前请填写真实身份信息，该信息将直接加盖于期末考试 A 卷密封线内与成绩归档档案中。
+        </p>
+
+        <form class="modal-form" @submit.prevent="saveStudentInfoAction">
+          <div class="form-row">
+            <div class="form-group required">
+              <label>真实姓名 <span class="req">*</span></label>
+              <input
+                v-model="studentForm.realName"
+                type="text"
+                class="form-input"
+                placeholder="例如：张三"
+                maxlength="50"
+                required
+              />
+            </div>
+            <div class="form-group required">
+              <label>学号 / 考号 <span class="req">*</span></label>
+              <input
+                v-model="studentForm.studentNo"
+                type="text"
+                class="form-input"
+                placeholder="例如：2022030101"
+                maxlength="50"
+                required
+              />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>所在学院 / 系部</label>
+              <input
+                v-model="studentForm.college"
+                type="text"
+                class="form-input"
+                placeholder="例如：电子信息工程学院"
+                maxlength="100"
+              />
+            </div>
+            <div class="form-group">
+              <label>所学专业</label>
+              <input
+                v-model="studentForm.major"
+                type="text"
+                class="form-input"
+                placeholder="例如：软件工程"
+                maxlength="100"
+              />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>行政班级</label>
+            <input
+              v-model="studentForm.className"
+              type="text"
+              class="form-input"
+              placeholder="例如：2022软工1班"
+              maxlength="100"
+            />
+          </div>
+
+          <div class="modal-actions">
+            <button
+              v-if="enter?.hasFilledStudentInfo"
+              type="button"
+              class="btn btn-secondary"
+              @click="showStudentModal = false"
+            >
+              取消修改
+            </button>
+            <button
+              v-else
+              type="button"
+              class="btn btn-secondary"
+              @click="router.push('/exams')"
+            >
+              暂不作答，退出考试
+            </button>
+            <button
+              type="submit"
+              class="btn btn-primary"
+              :disabled="savingStudentInfo"
+            >
+              {{ savingStudentInfo ? '保存核验中…' : '确认考生档案并开始作答 →' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.exam-station {
-  min-height: calc(100vh - 64px);
-  padding: 16px 24px 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  background: var(--bg);
+.practice-detail-page {
+  padding-top: 24px;
+  padding-bottom: 60px;
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
-/* 全屏加载与异常 */
-.state-full {
-  margin: 64px auto;
-  max-width: 600px;
-  padding: 64px 32px;
-  text-align: center;
-  border-radius: 0;
-}
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--line);
-  border-top-color: var(--ink);
-  animation: spin 0.8s linear infinite;
-  margin: 0 auto 16px;
-}
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-.error-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--danger);
-  margin-bottom: 8px;
-}
-.error-msg {
-  color: var(--ink-secondary);
-  margin-bottom: 24px;
-}
-
-/* 顶部控制仪表盘 */
-.dash-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px;
-  border-radius: 0;
-  gap: 16px;
+.detail-header {
   background: var(--surface);
   border: 1px solid var(--line);
+  border-radius: 0;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-sm);
 }
-.dash-left {
+
+.header-top {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
+  margin-bottom: 16px;
 }
-.exam-title-group {
+
+.btn-back {
+  background: transparent;
+  border: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: #495057;
+  cursor: pointer;
+  padding: 0;
+}
+
+.btn-back:hover {
+  color: #1e1e1e;
+}
+
+.header-actions {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-.exam-station-title {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--ink);
-}
-.mode-tag {
-  border-radius: 0;
+
+.status-pill {
   font-size: 11px;
   font-weight: 700;
-  padding: 2px 8px;
+  padding: 3px 8px;
+  color: #fff;
 }
-.mode-acm { background: var(--ink); color: #fff; }
-.mode-oi { background: #333; color: #fff; }
 
-.progress-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  background: var(--bg);
+.status-pill.active,
+.status-pill.ongoing {
+  background: #2b8a3e;
+}
+
+.status-pill.ended {
+  background: #495057;
+}
+
+.code-pill {
+  background: #f1f3f5;
   border: 1px solid var(--line);
+  padding: 3px 8px;
   font-size: 12px;
-}
-.pill-k { color: var(--ink-tertiary); }
-.pill-v { font-weight: 700; color: var(--ink); }
-
-.switch-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  background: #fff3e0;
-  color: #e65100;
-  border: 1px solid #ffe0b2;
-  font-size: 12px;
-  font-weight: 600;
-}
-.switch-warn-dot {
-  width: 6px;
-  height: 6px;
-  background: #e65100;
+  font-family: monospace;
 }
 
-.dash-right {
+.title-row {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  margin-bottom: 12px;
 }
-.clock-box {
+
+.practice-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 0;
+}
+
+.countdown-badge {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  padding: 4px 12px;
-  border: 1px solid var(--line);
-  background: var(--bg);
-}
-.clock-label {
-  font-size: 10px;
-  color: var(--ink-tertiary);
-  text-transform: uppercase;
-  line-height: 1;
-  margin-bottom: 2px;
-}
-.clock-digits {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--ink);
-  line-height: 1;
-}
-.clock-box.alert {
-  border-color: var(--danger);
-  background: #ffebee;
-}
-.clock-box.alert .clock-digits {
-  color: var(--danger);
-  animation: pulse 1s infinite alternate;
-}
-
-.btn-rank {
-  border-radius: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  padding: 6px 12px;
-}
-.rank-icon { width: 14px; height: 14px; }
-
-.btn-submit-exam {
-  border-radius: 0;
-  padding: 8px 18px;
-  font-weight: 700;
-  font-size: 14px;
-}
-
-/* 考场核心交互工作区 */
-.station-body {
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  gap: 16px;
-  align-items: stretch;
-}
-
-/* -------------------------------------------------------------
-   用户的核心标志性设计：直角方块题号导轨 (0-radius)
-   ------------------------------------------------------------- */
-.nav-rail {
-  border-radius: 0;
-  padding: 16px;
   background: var(--surface);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  height: calc(100vh - 170px);
-  overflow-y: auto;
-}
-.nav-rail-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--line);
-}
-.rail-title {
-  font-size: 13px;
-  font-weight: 700;
+  border: 1px solid var(--line);
   color: var(--ink);
-}
-.rail-count {
-  font-size: 12px;
-  color: var(--ink-tertiary);
-}
-
-.q-squares-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.q-nav-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px;
-  border: 1px solid transparent;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.15s ease;
+  padding: 6px 14px;
   border-radius: 0;
 }
-.q-nav-item:hover {
+
+.countdown-badge.urgent {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.countdown-badge.ended {
   background: var(--bg);
   border-color: var(--line);
-}
-.q-nav-item.active {
-  background: var(--bg);
-  border-color: var(--ink);
-}
-
-/* 核心直角方块 */
-.q-square-block {
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  border: 1px solid var(--line);
-  background: var(--bg);
   color: var(--ink-secondary);
-  border-radius: 0;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-weight: 700;
-  font-size: 13px;
-  transition: all 0.15s ease;
-}
-.q-nav-item.saved .q-square-block {
-  background: var(--surface);
-  color: var(--ink);
-  border: 2px solid var(--ink);
-}
-.q-nav-item.active .q-square-block {
-  background: var(--ink);
-  color: #fff;
-  border-color: var(--ink);
-}
-.q-nav-item.ac .q-square-block {
-  background: var(--success);
-  color: #fff;
-  border-color: var(--success);
-}
-.q-nav-item.wa .q-square-block {
-  background: var(--danger);
-  color: #fff;
-  border-color: var(--danger);
-}
-.sq-status-icon {
-  position: absolute;
-  bottom: 2px;
-  right: 2px;
-  font-size: 9px;
-  line-height: 1;
 }
 
-.q-item-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.q-item-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.q-type-label {
-  font-size: 11px;
+.cd-label {
+  font-size: 10px;
   color: var(--ink-tertiary);
-  font-weight: 600;
-}
-.q-score-label {
-  font-size: 11px;
-  color: var(--ink-secondary);
-  font-weight: 600;
-}
-.q-item-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  letter-spacing: 0.5px;
 }
 
-/* 主工作台双栏分屏 */
-.workspace {
-  border-radius: 0;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  height: calc(100vh - 170px);
-  overflow: hidden;
-}
-.workspace-grid {
-  display: grid;
-  grid-template-columns: minmax(360px, 45%) minmax(460px, 55%);
-  height: 100%;
-}
-
-/* 左栏：题面 */
-.left-pane {
-  border-right: 1px solid var(--line);
-  padding: 24px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.pane-head {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 16px;
-}
-.pane-q-title-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.q-cur-no {
-  font-size: 13px;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-weight: 700;
-  color: var(--ink-tertiary);
-}
-.pane-title {
-  margin: 0;
+.cd-time {
   font-size: 18px;
-  font-weight: 700;
-  color: var(--ink);
-}
-.pane-tags {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.score-badge {
-  background: #f0f0f0;
-  color: var(--ink);
-  border-radius: 0;
-}
-.spec-text {
-  font-size: 12px;
-  color: var(--ink-tertiary);
-}
-
-.pane-content {
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.schema-box {
-  border: 1px solid var(--line);
-  background: var(--bg);
-  border-radius: 0;
-  margin-top: 12px;
-}
-.schema-box-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--line);
-}
-.schema-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--ink-secondary);
-}
-.btn-copy-schema {
-  background: none;
-  border: 1px solid var(--line);
-  padding: 2px 8px;
-  font-size: 11px;
-  cursor: pointer;
-  border-radius: 0;
-}
-.schema-code {
-  margin: 0;
-  padding: 12px;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 12px;
-  overflow-x: auto;
-  line-height: 1.4;
-}
-
-/* 右栏：作答与执行 */
-.right-pane {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: var(--surface);
-}
-
-.editor-ctrl-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg);
-}
-.editor-ctrl-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.ctrl-label {
-  font-size: 12px;
-  color: var(--ink-tertiary);
-}
-.select-lang {
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  font-size: 13px;
-  border-radius: 0;
-}
-.dialect-pill {
-  font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   font-family: monospace;
 }
-.shortcut-tip {
-  font-size: 11px;
-  color: var(--ink-tertiary);
-}
 
-.editor-wrapper {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-/* 客观题交互 */
-.objective-pane {
-  flex: 1;
-  padding: 24px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.obj-hint-bar {
-  font-size: 13px;
+.countdown-badge.ended .cd-time {
+  font-size: 14px;
   color: var(--ink-secondary);
-  padding: 8px 12px;
-  background: var(--bg);
-  border-left: 3px solid var(--ink);
 }
 
-.fill-box {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-}
-.fill-label {
-  font-size: 13px;
-  font-weight: 600;
-}
-.fill-input {
-  width: 100%;
-  border-radius: 0;
-  font-size: 15px;
+.btn-view-mode {
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--line) !important;
 }
 
-.options-container {
-  display: flex;
-  flex-direction: column;
+.btn-view-mode:hover {
+  background: var(--bg) !important;
+  border-color: var(--ink) !important;
+}
+
+.bento-strip {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  padding: 12px 16px;
 }
-.opt-card {
+
+.bento-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.b-label {
+  font-size: 11px;
+  color: #868e96;
+  margin-bottom: 4px;
+}
+
+.b-value {
+  font-size: 15px;
+  font-weight: 800;
+  color: #212529;
+}
+
+.b-value.highlight {
+  color: #1971c2;
+}
+
+.b-value.success-text {
+  color: #2b8a3e;
+}
+
+.action-item {
+  justify-content: center;
+}
+
+.btn-submit-practice {
+  background: #1e1e1e;
+  color: #fff;
+  border: 1px solid #1e1e1e;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-submit-practice:hover:not(:disabled) {
+  background: #343a40;
+}
+
+.btn-submit-practice:disabled {
+  background: #adb5bd;
+  border-color: #adb5bd;
+  cursor: not-allowed;
+}
+
+.objective-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid #1e1e1e;
+  border-left: 5px solid #7048e8;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+}
+
+.obj-card-left {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  cursor: pointer;
-  border-radius: 0;
-  transition: all 0.15s ease;
+  gap: 16px;
 }
-.opt-card:hover {
-  border-color: var(--ink-secondary);
-  background: var(--bg);
-}
-.opt-card.selected {
-  border-color: var(--ink);
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--ink);
-}
-.opt-native-input {
-  display: none;
-}
-.opt-square-letter {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--ink);
+
+.obj-icon-square {
+  width: 50px;
+  height: 50px;
+  background: #7048e8;
+  color: #fff;
+  font-weight: 900;
+  font-size: 16px;
+  font-family: monospace;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  font-weight: 700;
-  border-radius: 0;
-  flex-shrink: 0;
-  transition: all 0.15s ease;
-}
-.opt-card.selected .opt-square-letter {
-  background: var(--ink);
-  color: #fff;
-  border-color: var(--ink);
-}
-.opt-desc {
-  font-size: 14px;
-  color: var(--ink);
-  line-height: 1.4;
 }
 
-/* 右栏底部操作条 */
-.pane-footer {
+.obj-badge-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 18px;
-  border-top: 1px solid var(--line);
-  background: var(--bg);
-  gap: 16px;
+  gap: 8px;
+  margin-bottom: 4px;
 }
-.footer-left {
+
+.obj-tag {
+  background: #7048e8;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+}
+
+.obj-score-tag {
+  background: #f1f3f5;
+  border: 1px solid #ced4da;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+}
+
+.obj-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: #1e1e1e;
+  margin: 0 0 4px 0;
+}
+
+.obj-desc {
+  font-size: 13px;
+  color: #868e96;
+  margin: 0;
+}
+
+.obj-card-right {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
 }
-.btn-judge {
-  border-radius: 0;
-  padding: 8px 16px;
+
+.obj-progress-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 12px;
+  color: #495057;
+}
+
+.btn-enter-obj {
+  background: #7048e8;
+  color: #fff;
+  border: 1px solid #5f3dc4;
+  padding: 8px 20px;
   font-size: 13px;
   font-weight: 700;
-}
-.btn-save {
+  cursor: pointer;
   border-radius: 0;
-  padding: 8px 14px;
+}
+
+.practical-section {
+  margin-top: 28px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 14px;
+}
+
+.sec-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1e1e1e;
+  margin: 0;
+}
+
+.sec-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: #868e96;
+}
+
+.sec-hint {
+  font-size: 12px;
+  color: #868e96;
+}
+
+.practical-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.practical-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid #ced4da;
+  border-radius: 0;
+  transition: all 0.15s ease;
+}
+
+.practical-item:hover {
+  background: #ebeef2;
+  border-color: #1e1e1e;
+  box-shadow: 2px 2px 0 #1e1e1e;
+}
+
+.practical-item.solved {
+  border-left: 4px solid #2b8a3e;
+}
+
+.practical-item.partial {
+  border-left: 4px solid #f59f00;
+}
+
+.status-col {
+  width: 28px;
+}
+
+.status-circle {
+  width: 24px;
+  height: 24px;
+  border-radius: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.status-circle.solved {
+  background: #2b8a3e;
+  color: #fff;
+}
+
+.status-circle.partial {
+  background: #f59f00;
+  color: #fff;
+}
+
+.status-circle.failed {
+  background: #c92a2a;
+  color: #fff;
+}
+
+.status-circle.unsolved {
+  border: 1px solid #ced4da;
+  color: #adb5bd;
+}
+
+.info-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.title-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.q-number {
+  font-size: 12px;
+  font-weight: 800;
+  font-family: monospace;
+  color: #495057;
+}
+
+.q-type-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  color: #fff;
+}
+
+.q-type-badge.algo {
+  background: #2b8a3e;
+}
+
+.q-type-badge.db,
+.q-type-badge.database {
+  background: #1e1e1e;
+}
+
+.q-score-badge {
+  background: #f8f9fa;
+  border: 1px solid #ced4da;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+}
+
+.q-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e1e1e;
+  margin: 0 0 6px 0;
+  cursor: pointer;
+}
+
+.q-title:hover {
+  color: #1971c2;
+}
+
+.q-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #868e96;
+}
+
+.meta-spec {
+  font-family: monospace;
+}
+
+.meta-user-score {
+  color: #2b8a3e;
+  font-weight: 700;
+}
+
+.meta-user-score.is-partial {
+  color: #e67700;
+}
+
+.btn-start {
+  background: #1e1e1e;
+  color: #fff;
+  border: 1px solid #1e1e1e;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.btn-start:hover {
+  background: #343a40;
+}
+
+.btn-start.btn-partial {
+  background: #f59f00;
+  border-color: #f59f00;
+  color: #fff;
+}
+
+.btn-start.btn-partial:hover {
+  background: #e67700;
+}
+
+.state-card {
+  padding: 60px;
+  text-align: center;
+}
+
+/* 考生信息密封条 */
+.student-seal-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #f8f9fa;
+  border: 1px dashed #ced4da;
+  margin-bottom: 20px;
   font-size: 13px;
 }
-.judge-status-block {
+
+.student-seal-bar.unverified {
+  background: #fff9db;
+  border-color: #f59f00;
+}
+
+.seal-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  background: #1e1e1e;
+  color: #fff;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.seal-pill.warn {
+  background: #e67700;
+}
+
+.seal-info-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  color: #495057;
+}
+
+.s-field strong {
+  color: #1e1e1e;
+  margin-right: 4px;
+}
+
+.warn-msg {
+  color: #d9480f;
+  font-weight: 600;
+}
+
+.btn-edit-student {
+  margin-left: auto;
+  background: #fff;
+  border: 1px solid #1e1e1e;
   padding: 4px 10px;
-  border-radius: 0;
   font-size: 12px;
   font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-edit-student:hover {
+  background: #1e1e1e;
   color: #fff;
 }
-.judge-status-block.ac { background: var(--success); }
-.judge-status-block.wa { background: var(--danger); }
-.judge-status-block.tle { background: #000; }
-.judge-status-block.re { background: #9c27b0; }
 
-.footer-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.btn-edit-student.primary {
+  background: #1e1e1e;
+  color: #fff;
 }
 
-/* 实时排名弹窗 */
-.rank-overlay {
+.btn-edit-student.primary:hover {
+  background: #343a40;
+}
+
+/* 弹窗样式 (KECE 极简硬朗风格) */
+.modal-backdrop {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.65);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  padding: 24px;
+  z-index: 9999;
+  padding: 20px;
 }
-.rank-modal {
-  width: min(800px, 100%);
-  max-height: 85vh;
+
+.modal-box {
+  width: 100%;
+  max-width: 580px;
+  background: #fff;
+  border: 2px solid #1e1e1e;
+  padding: 28px;
+  box-shadow: 8px 8px 0px rgba(0, 0, 0, 0.9);
+}
+
+.modal-header {
+  margin-bottom: 12px;
+}
+
+.modal-tag {
+  display: inline-block;
+  background: #1e1e1e;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  margin-bottom: 8px;
+}
+
+.modal-title {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0;
+  color: #1e1e1e;
+}
+
+.modal-desc {
+  font-size: 13px;
+  color: #495057;
+  line-height: 1.6;
+  margin: 0 0 20px 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.modal-form {
   display: flex;
   flex-direction: column;
-  background: var(--surface);
-  border-radius: 0;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  gap: 16px;
 }
-.rank-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--line);
-}
-.rank-head-title {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-.rank-modal-h {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 800;
-}
-.rank-refresh-tag {
-  font-size: 11px;
-  color: var(--ink-tertiary);
-}
-.rank-body {
-  padding: 16px 24px 24px;
-  overflow-y: auto;
-}
-.rank-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.rank-table th {
-  text-align: left;
-  padding: 10px 12px;
-  color: var(--ink-tertiary);
-  font-weight: 600;
-  border-bottom: 1px solid var(--line);
-}
-.rank-table td {
-  padding: 12px;
-  border-bottom: 1px solid var(--line);
-}
-.th-rank, .td-rank { width: 60px; }
-.th-num, .td-num { text-align: right; }
-.rank-badge-square {
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 800;
-  border-radius: 0;
-  background: var(--bg);
-  border: 1px solid var(--line);
-}
-.rank-badge-square.rank-1 { background: #000; color: #fff; border-color: #000; }
-.rank-badge-square.rank-2 { background: #333; color: #fff; border-color: #333; }
-.rank-badge-square.rank-3 { background: #666; color: #fff; border-color: #666; }
-.score-bold { font-weight: 700; color: var(--ink); }
 
-@media (max-width: 900px) {
-  .station-body {
-    grid-template-columns: 1fr;
-  }
-  .nav-rail {
-    height: auto;
-    max-height: 160px;
-  }
-  .q-squares-list {
-    flex-direction: row;
-    overflow-x: auto;
-  }
-  .workspace-grid {
-    grid-template-columns: 1fr;
-  }
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #212529;
+}
+
+.form-group label .req {
+  color: #fa5252;
+}
+
+.form-input {
+  border: 1px solid #1e1e1e;
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: 0;
+  outline: none;
+  background: #fff;
+}
+
+.form-input:focus {
+  border-color: #228be6;
+  box-shadow: 0 0 0 2px rgba(34, 139, 230, 0.2);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 16px;
+  border-top: 1px solid #e9ecef;
+}
+
+.modal-actions .btn {
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.modal-actions .btn-secondary {
+  background: #f1f3f5;
+  border: 1px solid #ced4da;
+  color: #495057;
+}
+
+.modal-actions .btn-secondary:hover {
+  background: #e9ecef;
+  color: #212529;
+}
+
+.modal-actions .btn-primary {
+  background: #1e1e1e;
+  border: 1px solid #1e1e1e;
+  color: #fff;
+}
+
+.modal-actions .btn-primary:hover:not(:disabled) {
+  background: #343a40;
+}
+
+.modal-actions .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

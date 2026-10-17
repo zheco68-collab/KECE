@@ -108,7 +108,10 @@ onMounted(async () => {
             <span>返回课练题目列表</span>
           </button>
           <div class="header-status-tags">
-            <span v-if="isSolved" class="solved-pill">✓ 已通过此题</span>
+            <span v-if="isSolved" class="solved-pill">✓ 已满分通过 ({{ practiceQuestion.score }}分)</span>
+            <span v-else-if="practiceQuestion.userScore > 0" class="partial-pill">
+              ◐ 已得 {{ practiceQuestion.userScore }} / {{ practiceQuestion.score }} 分 (部分分)
+            </span>
             <span class="badge diff-pill" :class="`difficulty-${question.difficulty.toLowerCase()}`">
               {{ difficultyLabels[question.difficulty] }}
             </span>
@@ -264,6 +267,7 @@ onMounted(async () => {
   flex-direction: column;
   gap: 18px;
   background: var(--surface);
+  border: 1px solid var(--line);
 }
 .header-top {
   display: flex;
@@ -276,7 +280,7 @@ onMounted(async () => {
   gap: 6px;
   padding: 6px 12px;
   border: 1px solid var(--line);
-  background: var(--bg);
+  background: #ffffff;
   color: var(--ink-secondary);
   font-size: 13px;
   font-weight: 500;
@@ -285,8 +289,8 @@ onMounted(async () => {
   transition: all 0.15s ease;
 }
 .btn-back:hover {
-  background: var(--surface);
-  color: var(--ink);
+  background: var(--ink);
+  color: #ffffff;
   border-color: var(--ink);
 }
 .back-icon {
@@ -304,6 +308,15 @@ onMounted(async () => {
   color: var(--success);
   background: #e8f5e9;
   border: 1px solid var(--success);
+  padding: 3px 8px;
+  border-radius: 0;
+}
+.partial-pill {
+  font-size: 12px;
+  font-weight: 700;
+  color: #d9480f;
+  background: #fff4e6;
+  border: 1px solid #f59f00;
   padding: 3px 8px;
   border-radius: 0;
 }
@@ -405,7 +418,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 14px 24px;
-  background: var(--bg);
+  background: #e9ecef;
   border-bottom: 1px solid var(--line);
 }
 .sec-title {
@@ -422,6 +435,7 @@ onMounted(async () => {
 .q-body-card {
   border-radius: 0;
   background: var(--surface);
+  border: 1px solid var(--line);
   overflow: hidden;
 }
 .prose {
@@ -429,6 +443,7 @@ onMounted(async () => {
   line-height: 1.8;
   font-size: 15px;
   color: var(--ink);
+  background: #ffffff;
 }
 .prose :deep(h1),
 .prose :deep(h2),
@@ -443,7 +458,7 @@ onMounted(async () => {
 }
 .prose :deep(code) {
   padding: 2px 6px;
-  background: var(--bg);
+  background: #f8f9fa;
   color: var(--ink);
   border: 1px solid var(--line);
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -451,7 +466,7 @@ onMounted(async () => {
   border-radius: 0;
 }
 .prose :deep(pre) {
-  background: var(--bg);
+  background: #f8f9fa;
   color: var(--ink);
   border: 1px solid var(--line);
   padding: 16px;
@@ -469,6 +484,7 @@ onMounted(async () => {
 .q-samples-card {
   border-radius: 0;
   background: var(--surface);
+  border: 1px solid var(--line);
   overflow: hidden;
 }
 .samples-grid {
@@ -480,12 +496,12 @@ onMounted(async () => {
 .sample-item {
   border-radius: 0;
   border: 1px solid var(--line);
-  background: var(--surface);
+  background: #ffffff;
   overflow: hidden;
 }
 .sample-item-head {
   padding: 10px 16px;
-  background: var(--bg);
+  background: #e9ecef;
   border-bottom: 1px solid var(--line);
 }
 .sample-idx {
@@ -525,7 +541,7 @@ onMounted(async () => {
   padding: 2px 8px;
   font-size: 11px;
   border: 1px solid var(--line);
-  background: var(--bg);
+  background: #ffffff;
   color: var(--ink-secondary);
   cursor: pointer;
   border-radius: 0;
@@ -544,5 +560,8 @@ onMounted(async () => {
   word-break: break-all;
   line-height: 1.5;
   color: var(--ink);
+  background: #f8f9fa;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
 }
 </style>

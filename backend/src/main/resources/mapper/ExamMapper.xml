@@ -11,6 +11,9 @@
         <result column="end_time" property="endTime"/>
         <result column="mode" property="mode"/>
         <result column="status" property="status"/>
+        <result column="require_student_info" property="requireStudentInfo"/>
+        <result column="school_name" property="schoolName"/>
+        <result column="semester" property="semester"/>
         <result column="session_status" property="sessionStatus"/>
         <result column="created_by" property="createdBy"/>
         <result column="created_at" property="createdAt"/>
@@ -19,9 +22,9 @@
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO `exam`
-            (title, description, duration_minutes, start_time, end_time, mode, status, session_status, created_by)
+            (title, description, duration_minutes, start_time, end_time, mode, status, require_student_info, school_name, semester, session_status, created_by)
         VALUES
-            (#{title}, #{description}, #{durationMinutes}, #{startTime}, #{endTime}, #{mode}, #{status}, #{sessionStatus}, #{createdBy})
+            (#{title}, #{description}, #{durationMinutes}, #{startTime}, #{endTime}, #{mode}, #{status}, #{requireStudentInfo}, #{schoolName}, #{semester}, #{sessionStatus}, #{createdBy})
     </insert>
 
     <update id="update">
@@ -34,6 +37,9 @@
             <if test="endTime != null">end_time = #{endTime},</if>
             <if test="mode != null">mode = #{mode},</if>
             <if test="status != null">status = #{status},</if>
+            <if test="requireStudentInfo != null">require_student_info = #{requireStudentInfo},</if>
+            <if test="schoolName != null">school_name = #{schoolName},</if>
+            <if test="semester != null">semester = #{semester},</if>
         </set>
         WHERE id = #{id}
     </update>

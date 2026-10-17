@@ -300,12 +300,15 @@ onBeforeUnmount(() => {
                 v-for="act in monitor.recentActivities"
                 :key="act.id"
                 class="ticker-card"
-                :class="act.status.toLowerCase()"
+                :class="act.status === 'ACCEPTED' ? 'accepted' : (act.score > 0 || act.status === 'PARTIAL' ? 'partial' : 'wrong_answer')"
               >
                 <div class="ticker-top">
                   <span class="act-user">{{ maskName(act.nickname || act.username) }}</span>
-                  <span class="act-status" :class="act.status.toLowerCase()">
-                    {{ act.status === 'ACCEPTED' ? 'AC 通过' : 'WA 未通过' }}
+                  <span
+                    class="act-status"
+                    :class="act.status === 'ACCEPTED' ? 'accepted' : (act.score > 0 || act.status === 'PARTIAL' ? 'partial' : 'wrong_answer')"
+                  >
+                    {{ act.status === 'ACCEPTED' ? 'AC 通过' : (act.score > 0 || act.status === 'PARTIAL' ? '部分分' : 'WA 未通过') }}
                   </span>
                 </div>
                 <div class="ticker-question">
@@ -895,6 +898,11 @@ onBeforeUnmount(() => {
   background: #fbfdfb;
 }
 
+.ticker-card.partial {
+  border-left-color: #f59f00;
+  background: #fffdfa;
+}
+
 .ticker-card.wrong_answer {
   border-left-color: var(--danger);
   background: #fdfbfb;
@@ -923,6 +931,12 @@ onBeforeUnmount(() => {
   background: var(--success-bg);
   color: var(--success);
   border: 1px solid var(--success);
+}
+
+.act-status.partial {
+  background: #fff4e6;
+  color: #d9480f;
+  border: 1px solid #f59f00;
 }
 
 .act-status.wrong_answer {
